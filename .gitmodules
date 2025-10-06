@@ -7,3 +7,6 @@
 [submodule "wandber"]
 	path = wandber
 	url = https://github.com/DIETI-DISTA-IoT/Wandber
+[submodule "dashboard"]
+	path = dashboard
+	url = https://github.com/DIETI-DISTA-IoT/of-dashboard
