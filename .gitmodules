@@ -10,3 +10,6 @@
 [submodule "dashboard"]
 	path = dashboard
 	url = https://github.com/DIETI-DISTA-IoT/of-dashboard
+[submodule "OpenFAIR"]
+	path = OpenFAIR
+	url = https://github.com/DIETI-DISTA-IoT/of-core
