@@ -61,9 +61,7 @@ services:
       retries: 5  # Retry count before reporting the container as unhealthy
 
   wandber:
-    build:
-      context: ./wandber  # Path to the producer's Dockerfile
-      dockerfile: Dockerfile  # Specify the Dockerfile for building the image
+    image: open_fair-wandber:latest
     container_name: wandber  # Container name for easier identification
     hostname: wandber  # Hostname for internal communication
     environment:
@@ -80,9 +78,7 @@ services:
     command: ["tail", "-f", "/dev/null"]
 
   dashboard:
-    build:
-      context: .
-      dockerfile: ./dashboard/Dockerfile
+    image: open_fair-dashboard:latest
     container_name: dashboard
     hostname: dashboard
     depends_on:
@@ -101,7 +97,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
   producer_image:
-    image: open_fair-producer
+    image: open_fair-producer:latest
     build:
       context: .
       dockerfile: producer/Dockerfile
@@ -110,24 +106,10 @@ services:
     profiles: ["images"]
 
   consumer_image:
-    image: open_fair-consumer
+    image: open_fair-consumer:latest
     build:
       context: .
       dockerfile: consumer/Dockerfile
     networks:
       - trains_network
     profiles: ["images"]
-
-  # consumer:
-  #   build:
-  #     context: ./consumer  # Path to the consumer's Dockerfile
-  #     dockerfile: Dockerfile  # Specify the Dockerfile for building the image
-  #   container_name: consumer  # Container name for easier identification
-  #   hostname: consumer  # Hostname for internal communication
-  #   depends_on:
-  #     - kafka  # Ensure this consumer starts only after Kafka is running
-  #   networks:
-  #     - trains_network  # Connect the consumer to the custom Docker network
-  #   # entrypoint: ["/wait-for-it.sh", "kafka:9092", "--", "sh", "-c", "python consume.py"]  # Wait for Kafka before running the script
-  #   command: ["tail", "-f", "/dev/null"]
-
