@@ -1,5 +1,0 @@
-#per escludere file non necessari
-__pycache__
-*.pyc
-*.pyo
-venv/
