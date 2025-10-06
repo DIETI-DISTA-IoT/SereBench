@@ -106,6 +106,12 @@ Use `make all` to build the producer and consumer docker images:
 
     make all
 
+> **After the first build, to force a fast-rebuild of the image using fresh code:** You can use selective caching to accelerate building:
+
+    make all-scache
+
+It will only update the container's code from the repository and not the dependencies when building the images.
+
 
 ### Launching:
 
