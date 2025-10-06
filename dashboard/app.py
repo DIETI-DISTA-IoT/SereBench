@@ -55,7 +55,7 @@ def processing_message(topic, msg):
         app.logger.error(f"Error processing message from topic {topic}: {e}")
 
 
-@hydra.main(config_path="../config", config_name="default", version_base="1.2")
+@hydra.main(config_path="/config", config_name="default", version_base="1.2")
 def create_app(cfg: DictConfig) -> None:
     global app, msg_cache, metrics_logger
 
@@ -79,6 +79,10 @@ def create_app(cfg: DictConfig) -> None:
     app.logger.setLevel(cfg.logging_level.upper())
     # pretty print the cfg OmegaDict
     app.logger.info(OmegaConf.to_yaml(cfg))
+
+    @app.route('/health', methods=['GET'])
+    def health():
+        return {"status": "ok"}, 200
 
     # Create a ConainerManager instance
     container_manager = ContainerManager(cfg)

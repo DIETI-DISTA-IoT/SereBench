@@ -1,6 +1,6 @@
 # Use a base image of Python (Alpine version for a smaller size)
 # Alpine is chosen for its lightweight nature, which reduces the overall image size.
-FROM python:3.10-alpine
+FROM python:3.10-slim
 
 # Set the working directory inside the container
 # All subsequent commands and operations will be executed in this directory.
@@ -21,18 +21,28 @@ ENV KAFKA_BROKER="kafka:9092"
 ENV TOPIC_NAME="train-sensor-data"
 #ENV VEHICLE_NAME="e700_4801"
 
-# Install required build tools and libraries for native dependencies and librdkafka
-# These packages ensure that Python modules with C/C++ extensions compile and run properly.
-RUN apk update && apk add --no-cache gcc g++ musl-dev linux-headers librdkafka librdkafka-dev libc-dev python3-dev bash
+# Install system dependencies including Docker CLI
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy the wait-for-it.sh script into the container and set executable permissions
-# The script is used to wait for dependent services (such as Kafka) to become available before running the main app.
-COPY wait-for-it.sh /wait-for-it.sh
-RUN chmod +x /wait-for-it.sh
+# Install Docker CLI
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+RUN echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+RUN apt-get update && apt-get install -y docker-ce-cli && rm -rf /var/lib/apt/lists/*
 
 # Copy all project files into the working directory of the container
 # This includes Python scripts, Flask configuration, and any additional resources needed by the application.
-COPY . .
+# Copy only the dashboard code into its workdir
+COPY dashboard/ .
+# Also add the OpenFAIR package to PYTHONPATH by copying the project root
+COPY OpenFAIR/ /OpenFAIR/
+# Copy the config directory for hydra
+COPY config/ /config/
+ENV PYTHONPATH=/
 
 # Upgrade pip to the latest version
 # Ensures that the latest packages and features are available.
@@ -41,13 +51,10 @@ RUN pip install --no-cache-dir --upgrade pip
 # Install the dependencies specified in the requirements file
 # The requirements file should list all Python packages needed for the Flask app and Kafka consumer.
 RUN pip install --no-cache-dir -r requirements.txt
-# Ensure numpy is explicitly installed
-RUN pip install --no-cache-dir scipy pandas numpy copulas
 
 # Expose port 5000 to allow external access to the Flask app
 # This makes the port accessible outside the container.
 EXPOSE 5000
 
-# Command to start the Flask application when the container runs
-# The `flask run` command launches the Flask server using the settings defined by the environment variables.
-CMD ["flask", "run"]
+# Command to start the application when the container runs
+CMD ["python", "app.py"]

@@ -13,6 +13,8 @@ from confluent_kafka.serialization import StringSerializer
 import json
 import requests
 import os
+import platform
+import socket
 
 
 WANDBER_COMMAND = "python wandber.py"
@@ -61,14 +63,15 @@ class ContainerManager:
         self.attack_agent = AttackAgent(self, cfg)
         self.start_dashboard_monitor()
         if cfg.dashboard.proxy:
+            self.logger.info("Proxy mode enabled")
             self.proxy_configuration()
 
 
     def proxy_configuration(self):
         # get the value of the no_proxy env var:
-        no_proxy = os.environ.get('no_proxy')
+        no_proxy = os.environ.get('no_proxy', '')
         for node_ip in self.containers_ips.values():
-            if node_ip not in no_proxy:
+            if node_ip and node_ip not in no_proxy:
                 no_proxy += f",{node_ip}"
         os.environ['no_proxy'] = no_proxy
 
@@ -136,8 +139,35 @@ class ContainerManager:
 
 
     def get_my_ip(self):
-        cmd = "hostname -I | cut -d' ' -f1"
-        return subprocess.run(cmd, shell=True, check=True, stdout=subprocess.PIPE).stdout.decode().strip()
+        """Get the host IP address, works on both Windows and Linux"""
+        try:
+            # Try to get IP from environment variable first
+            host_ip = os.getenv('HOST_IP')
+            if host_ip:
+                return host_ip
+            
+            # Detect OS and use appropriate method
+            if platform.system() == "Windows":
+                # Windows method: use socket to get local IP
+                try:
+                    # Connect to a remote address to determine local IP
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(("8.8.8.8", 80))
+                    local_ip = s.getsockname()[0]
+                    s.close()
+                    return local_ip
+                except Exception:
+                    # Fallback: get hostname and resolve
+                    hostname = socket.gethostname()
+                    return socket.gethostbyname(hostname)
+            else:
+                # Linux/Unix method: use hostname command
+                cmd = "hostname -I | cut -d' ' -f1"
+                return subprocess.run(cmd, shell=True, check=True, stdout=subprocess.PIPE).stdout.decode().strip()
+        except Exception as e:
+            self.logger.warning(f"Could not determine host IP: {e}")
+            # Fallback to localhost
+            return "127.0.0.1"
 
 
     def init_vehicle_status_dict(self):
@@ -175,38 +205,48 @@ class ContainerManager:
 
     def create_producer(self, vehicle_name):
         container_name = f"{vehicle_name}_producer"
+        env_vars = {
+            "VEHICLE_NAME": vehicle_name,
+            "HOST_IP": self.host_ip,
+        }
+        cpu_period = int(self.producer_manager.vehicle_configs[vehicle_name]['cpu_period'])
+        cpu_quota = int(self.producer_manager.vehicle_configs[vehicle_name]['cpu_quota'])
+        cpuset_cpus = str(self.producer_manager.vehicle_configs[vehicle_name]['cpu_cores'])
 
-
-        cmd = [
-            "docker", "run", "-d",
-            "--name", container_name,
-            "--network", "of_trains_network",
-            "--env", f"VEHICLE_NAME={vehicle_name}",
-            "--env", f"HOST_IP={self.host_ip}",
-            "--cpuset-cpus", self.producer_manager.vehicle_configs[vehicle_name]['cpu_cores'],
-            "--cpu-period", str(self.producer_manager.vehicle_configs[vehicle_name]['cpu_period']),
-            "--cpu-quota", str(self.producer_manager.vehicle_configs[vehicle_name]['cpu_quota']),
-            "open_fair-producer",
-            "tail", "-f", "/dev/null"
-        ]
-        subprocess.run(cmd)
+        self.client.containers.run(
+            image="open_fair-producer",
+            name=container_name,
+            detach=True,
+            network="trains_network",
+            environment=env_vars,
+            cpu_period=cpu_period,
+            cpu_quota=cpu_quota,
+            cpuset_cpus=cpuset_cpus
+            # rely on image CMD to start the app
+        )
         
 
     def create_consumer(self, vehicle_name):
         container_name = f"{vehicle_name}_consumer"
-        cmd = [
-            "docker", "run", "-d",
-            "--name", container_name,
-            "--network", "of_trains_network",
-            "--env", f"VEHICLE_NAME={vehicle_name}",
-            "--env", f"HOST_IP={self.host_ip}",
-            "--cpuset-cpus", self.consumer_manager.consumer_configs[vehicle_name]['cpu_cores'],
-            "--cpu-period", str(self.consumer_manager.consumer_configs[vehicle_name]['cpu_period']),
-            "--cpu-quota", str(self.consumer_manager.consumer_configs[vehicle_name]['cpu_quota']),
-            "open_fair-consumer",
-            "tail", "-f", "/dev/null"
-        ]
-        subprocess.run(cmd)
+        env_vars = {
+            "VEHICLE_NAME": vehicle_name,
+            "HOST_IP": self.host_ip,
+        }
+        cpu_period = int(self.consumer_manager.consumer_configs[vehicle_name]['cpu_period'])
+        cpu_quota = int(self.consumer_manager.consumer_configs[vehicle_name]['cpu_quota'])
+        cpuset_cpus = str(self.consumer_manager.consumer_configs[vehicle_name]['cpu_cores'])
+
+        self.client.containers.run(
+            image="open_fair-consumer",
+            name=container_name,
+            detach=True,
+            network="trains_network",
+            environment=env_vars,
+            cpu_period=cpu_period,
+            cpu_quota=cpu_quota,
+            cpuset_cpus=cpuset_cpus
+            # rely on image CMD to start the app
+        )
 
 
     def refresh_containers(self):     
@@ -215,9 +255,13 @@ class ContainerManager:
             container_info = self.client.api.inspect_container(container.id)
             # Extract the IP address of the container from its network settings
             container_img_name = container_info['Config']['Image']
-            container_ip = container_info['NetworkSettings']['Networks']['of_trains_network']['IPAddress']
+            # Prefer the compose network name 'trains_network'
+            networks = container_info['NetworkSettings']['Networks']
+            network_name = 'trains_network' if 'trains_network' in networks else next(iter(networks.keys()), None)
+            container_ip = networks[network_name]['IPAddress'] if network_name else None
             self.logger.info(f'Found {container.name} container with ip {container_ip}')
-            if 'producer' in container_img_name:
+            # Classify by container name for reliability
+            if 'producer' in container.name:
                 self.producers[container.name] = container
             elif 'consumer' in container.name:
                 self.consumers[container.name] = container
@@ -234,16 +278,26 @@ class ContainerManager:
             
     
     def produce_all(self):
-        return self.producer_manager.start_all_producers()
+        message, results = self.producer_manager.start_all_producers()
+        # Log individual results
+        for result in results:
+            self.logger.info(result)
+        return message
 
 
     def stop_producing_all(self):
-        self.producer_manager.stop_all_producers()
-        return "All producers stopped!"
+        message, results = self.producer_manager.stop_all_producers()
+        # Log individual results
+        for result in results:
+            self.logger.info(result)
+        return message
 
 
     def consume_all(self):
-        return self.consumer_manager.start_all_consumers()
+        message, results = self.consumer_manager.start_all_consumers()
+        for result in results:
+            self.logger.info(result)
+        return message
 
 
     def stop_consuming_all(self):

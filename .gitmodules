@@ -1,6 +1,6 @@
 [submodule "producer"]
 	path = producer
-	url = https://github.com/DIETI-DISTA-IoT/Train_IoT_data_producer
+	url = https://github.com//DIETI-DISTA-IoT/Train_IoT_data_producer
 [submodule "consumer"]
 	path = consumer
 	url = https://github.com/DIETI-DISTA-IoT/Train_IoT_local_anomaly_detection

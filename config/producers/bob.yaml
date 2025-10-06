@@ -1,0 +1,39 @@
+# Configuration for producer-bob
+vehicle:
+  name: bob
+  flotta: ETR700
+
+data_generation:
+  mu_anomalies: 120
+  mu_normal: 90
+  alpha: 0.3
+  beta: 1.5
+  time_emulation: false
+  
+  # Anomaly classes (subset for testing)
+  anomaly_classes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  
+  # Diagnostics classes (subset for testing)
+  diagnostics_classes: [0, 1, 2, 3, 4, 5, 6, 7]
+
+# Health probe configuration
+probe:
+  frequency_seconds: 3
+  timeout: 5
+  host: "www.google.com"
+  metrics: [RTT, INBOUND, OUTBOUND, CPU, MEM]
+
+# Attack simulation configuration
+attack:
+  target_ip: "172.18.0.4"
+  target_port: 80
+  duration: 0
+  packet_size: 1024
+  delay: 0.001
+  bot_port: 5003
+
+# System configuration
+system:
+  mode: "OF"
+  logging_level: "INFO"
+  manager_port: 5000

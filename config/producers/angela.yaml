@@ -1,0 +1,39 @@
+# Configuration for producer-angela
+vehicle:
+  name: angela
+  flotta: ETR700
+
+data_generation:
+  mu_anomalies: 157
+  mu_normal: 115
+  alpha: 0.2
+  beta: 1.9
+  time_emulation: false
+  
+  # Anomaly classes (0-18)
+  anomaly_classes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+  
+  # Diagnostics classes (0-14)
+  diagnostics_classes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+
+# Health probe configuration
+probe:
+  frequency_seconds: 2
+  timeout: 5
+  host: "www.google.com"
+  metrics: [RTT, INBOUND, OUTBOUND, CPU, MEM]
+
+# Attack simulation configuration
+attack:
+  target_ip: "172.18.0.4"
+  target_port: 80
+  duration: 0  # 0 means continuous until stopped
+  packet_size: 1024
+  delay: 0.001
+  bot_port: 5002
+
+# System configuration
+system:
+  mode: "OF"  # OF or SW
+  logging_level: "INFO"
+  manager_port: 5000

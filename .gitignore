@@ -4,3 +4,6 @@ outputs
 .env
 data
 **/__pycache__
+**/of-venv
+**/.idea
+**/venv

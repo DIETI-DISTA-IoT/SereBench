@@ -1,12 +1,13 @@
 # Definition of the custom network for container communication
 networks:
   trains_network:
+    name: trains_network
     driver: bridge  # Use the bridge network driver for isolated container communication
 
 services:
   # Zookeeper service for Kafka coordination
   zookeeper:
-    image: confluentinc/cp-zookeeper:latest  # Latest Zookeeper image from Confluent
+    image: confluentinc/cp-zookeeper:7.4.0  # Pin version instead of latest
     container_name: zookeeper  # Container name for easier identification
     hostname: zookeeper  # Hostname for internal communication within the network
     environment:
@@ -17,14 +18,21 @@ services:
       - "2181:2181"  # Expose port 2181 to allow external clients to connect
     networks:
       - trains_network  # Connect Zookeeper to the custom Docker network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Kafka service for message handling
   kafka:
-    image: confluentinc/cp-kafka:latest  # Latest Kafka image from Confluent
+    image: confluentinc/cp-kafka:7.4.0  # Pin version instead of latest
     container_name: kafka  # Container name for easier identification
     hostname: kafka  # Hostname for internal communication within the network
     depends_on:
-      - zookeeper  # Ensure Kafka starts only after Zookeeper is running
+      zookeeper:
+        condition: service_healthy  # Wait for zookeeper to be healthy
     environment:
       KAFKA_BROKER_ID: 1  # Unique identifier for this Kafka broker
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181  # Address to connect to Zookeeper
@@ -34,17 +42,23 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT  # Security protocol mappings for each listener
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1  # Replication factor for internal Kafka topics
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'  # Automatically create topics when required
+      # Performance tuning
+      KAFKA_NUM_NETWORK_THREADS: 3
+      KAFKA_NUM_IO_THREADS: 8
+      KAFKA_SOCKET_SEND_BUFFER_BYTES: 102400
+      KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 102400
+      KAFKA_SOCKET_REQUEST_MAX_BYTES: 104857600
     ports:
       - "9092:9092"  # Expose Kafka's internal communication port
       - "19092:19092"  # Expose Kafka's external communication port
     networks:
       - trains_network  # Connect Kafka to the custom Docker network
+    restart: unless-stopped
     healthcheck:
       test: [ "CMD", "nc", "-z", "localhost", "9092" ]  # Command to check if Kafka is running
       interval: 10s  # Time interval between health checks
       timeout: 5s  # Maximum time to wait for the health check
       retries: 5  # Retry count before reporting the container as unhealthy
-
 
   wandber:
     build:
@@ -56,27 +70,53 @@ services:
       WANDB_API_KEY: ${WANDB_API_KEY}
       no_proxy: ${HOST_IP}  # Allows the container to access the host machine in case the host has a proxy.
       HOST_IP: ${HOST_IP}  #  Replace with your host IP address in the .env file
+      BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
-      - kafka  # Ensure this producer starts only after Kafka is running
+      kafka:
+        condition: service_healthy  # Wait for kafka to be healthy
     networks:
       - trains_network  # Connect the producer to the custom Docker network
-    # entrypoint: ["/wait-for-it.sh", "kafka:9092", "--", "sh", "-c", "python produce.py"]  # Wait for Kafka before running the script
+    restart: unless-stopped
     command: ["tail", "-f", "/dev/null"]
 
+  dashboard:
+    build:
+      context: .
+      dockerfile: ./dashboard/Dockerfile
+    container_name: dashboard
+    hostname: dashboard
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - trains_network
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - no_proxy=${HOST_IP}
+      - HOST_IP=${HOST_IP}
+      - BOOTSTRAP_SERVERS=kafka:9092
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
-  # producer:
-  #   build:
-  #     context: ./producer  # Path to the producer's Dockerfile
-  #     dockerfile: Dockerfile  # Specify the Dockerfile for building the image
-  #   container_name: producer  # Container name for easier identification
-  #   hostname: producer  # Hostname for internal communication
-  #   depends_on:
-  #     - kafka  # Ensure this producer starts only after Kafka is running
-  #   networks:
-  #     - trains_network  # Connect the producer to the custom Docker network
-  #   # entrypoint: ["/wait-for-it.sh", "kafka:9092", "--", "sh", "-c", "python produce.py"]  # Wait for Kafka before running the script
-  #   command: ["tail", "-f", "/dev/null"]
+  producer_image:
+    image: open_fair-producer
+    build:
+      context: .
+      dockerfile: producer/Dockerfile
+    networks:
+      - trains_network
+    profiles: ["images"]
 
+  consumer_image:
+    image: open_fair-consumer
+    build:
+      context: .
+      dockerfile: consumer/Dockerfile
+    networks:
+      - trains_network
+    profiles: ["images"]
 
   # consumer:
   #   build:
