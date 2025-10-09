@@ -38,38 +38,10 @@ git submodule update --init --recursive
 This will fetch and checkout the submodules recursively.
 
 
-### Installation:
+## Set up:
 
-If you're using Windows to run the application, you may want to consider running the application on WSL (Windows Subsystem for Linux), which eliminates overhead caused by a VM or dualbooting.
+### Installing Docker
 
-[This guide](https://learn.microsoft.com/en-us/windows/wsl/install) by Microsoft explains how to install and activate WSL with a user-chosen Linux distribution (recommended: Ubuntu 24-04).
-
-You may want to create a virtual environment before installing python libraries:
-
-
-   ```bash
-   python3 -m venv <name-of-the-venv>
-   ```
-
-Activate the virtual environment. The command to activate the virtual environment depends on your operating system:
-
-   - On macOS and Linux:
-
-     ```bash
-     source <name-of-the-venv>/bin/activate
-     ```
-
-   - On Windows:
-
-     ```bash
-     <name-of-the-venv>\Scripts\activate
-     ```
-
-Once the virtual environment is activated, you can install packages and run Python scripts within the virtual environment without affecting your global Python installation. Install the required packages to launch the container manager from the `requirements.txt` file:
-
-    pip install -r requirements.txt
-
-## Installing Docker
 **On Windows:**
 
 Download [Docker Desktop](https://www.docker.com/products/docker-desktop/) and run the program.
@@ -87,6 +59,11 @@ to your `/etc/wsl.conf` within your WSL distribution and restart it with `wsl.ex
 
 To verify that Docker works, run `docker version` and `docker compose version` to verify that Docker Compose got installed as well.
 
+**On Linux:**
+
+Run `sudo apt-get update` and `sudo apt-get install docker.io docker-compose`.
+Verify it works by executing `docker --version` and `docker compose --version`.
+
 ## Installing Make
 **On Windows:**
 
@@ -94,7 +71,7 @@ Download Make from the [GnuWin32](https://gnuwin32.sourceforge.net/packages/make
 Run the installer and add the `bin` directory to your `PATH` (inside Windows' Environment Variables).
 Verify it works by opening a command prompt and executing `make --version`.
 
-**On WSL:**
+**On WSL or Linux:**
 
 Run `sudo apt-get update` and `sudo apt-get install make`.
 Verify it works by executing `make --version`.
@@ -115,7 +92,7 @@ It will only update the container's code from the repository and not the depende
 
 ### Launching:
 
-**IMPORTANT** For using the wandb logging dashboard, you should have a file called .env in the project's root folder containing your wandb api key under the WANDB_API_KEY voice:
+> **IMPORTANT** For using the wandb logging dashboard, you should have a file called **".env"** in the project's root folder containing your wandb api key under the WANDB_API_KEY voice:
 
 ```.env file
 # .env file content:
@@ -124,13 +101,13 @@ WANDB_API_KEY=your_wandb_api_key_here
 
 ```
 
-Use `docker compose up` to start the whole cluster. Otherwise, start launching only the kafka and zookeeper
-
+Use `docker compose up` to start the whole cluster:
     docker compose up -d
 
-Run the container manager script:
+If you prefer you can start launching only some services:
 
-    python dashboard/app.py
+    docker compose up -d zookeeper kafka dashboard
+
 
 Adjust configurations for this script in the `config/default.yaml` or create an ovverride `*.yaml` configuration on the `config/override` directory that you can use to override a subset of params. To launch an override conf, use:
 

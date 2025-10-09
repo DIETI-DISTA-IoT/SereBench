@@ -6,21 +6,11 @@ This directory contains configuration files for the OpenFAIR system, implementin
 
 The new configuration system replaces unsafe command-line argument injection with:
 1. **Environment Variables** - For basic, non-changing parameters
-2. **YAML Configuration Files** - For complex, vehicle-specific settings
+2. **YAML Configuration File** - For complex, vehicle-specific settings
 3. **HTTP API** - For dynamic configuration and control
 4. **Validation** - Input validation and type safety
 5. **Health Checks** - Built-in monitoring endpoints
 
-## Directory Structure
-
-```
-config/
-├── producers/           # Producer-specific configurations
-│   ├── angela.yaml     # Configuration for producer-angela
-│   ├── bob.yaml        # Configuration for producer-bob
-│   └── ...             # Additional vehicle configurations
-└── README.md           # This file
-```
 
 ## Configuration Methods
 

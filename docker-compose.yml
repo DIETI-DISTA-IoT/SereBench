@@ -95,7 +95,9 @@ services:
       - BOOTSTRAP_SERVERS=kafka:9092
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    # command: ["tail", "-f", "/dev/null"] # for development
+      # Bind-mount the host config directory into the container's /app/config
+      - ./config:/app/config
+    # command: ["tail", "-f", "/dev/null"] # decomment this line if you want to start the container without running any command
     
   producer_image:
     image: open_fair-producer:latest
