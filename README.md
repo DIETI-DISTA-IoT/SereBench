@@ -104,16 +104,12 @@ WANDB_API_KEY=your_wandb_api_key_here
 Use `docker compose up` to start the whole cluster:
     docker compose up -d
 
-If you prefer you can start launching only some services:
+Otherwise, you can load different services separately:
 
-    docker compose up -d zookeeper kafka dashboard
+    docker compose up -d zookeeper kafka producer consumer wandber 
+    
+    docker compose up -d dashboard
 
+You can use `docker compose stop` to stop a service and 'docker compose up -d' to reload it (e.g. after changing the configs or code):
 
-Adjust configurations for this script in the `config/default.yaml` or create an ovverride `*.yaml` configuration on the `config/override` directory that you can use to override a subset of params. To launch an override conf, use:
-
-    python dashboard/app.py override=my_conf_filename
-
-Comand-line args can be sent also using the hydra syntax (i.e. no hyphens) and created appending `+` 
-
-    python dashboard/app.py +foo=bar
-
+    docker compose stop dashboard && docker compose up -d dashboard
