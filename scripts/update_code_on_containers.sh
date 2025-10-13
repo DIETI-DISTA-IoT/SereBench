@@ -12,7 +12,8 @@ containers=("claude_consumer" \
             "emily_producer" \
             "daniel_consumer" \
             "daniel_producer" \
-            "wandber")
+            "wandber" \ 
+            "dashboard")
 
 # Loop through each container and perform git pull
 for container in "${containers[@]}"; do
