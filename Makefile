@@ -4,7 +4,7 @@
 
 all: build-dashboard build-consumer build-producer build-wandber
 
-all_scache: build-dashboard-scache build-producer-scache build-consumer-scache build-wandber-scache
+all-scache: build-dashboard-scache build-producer-scache build-consumer-scache build-wandber-scache
 
 build-producer:
 	docker build -t open_fair-producer -f producer/Dockerfile .
