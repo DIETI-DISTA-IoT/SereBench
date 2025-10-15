@@ -24,6 +24,9 @@ federated_learning:
   
 security_manager:
   logging_level: ${logging_level}
+  kafka_topic_update_interval_secs: ${kafka_topic_update_interval_secs}
+  kafka_consumer_group_id: SECURITY_MANAGER
+  kafka_auto_offset_reset: earliest
   buffer_size: 10000
   batch_size: 32
   learning_rate: 0.001
@@ -38,6 +41,7 @@ security_manager:
     - OUTBOUND
     - CPU
     - MEM
+  input_dim: 3
   hidden_dim: 50
   output_dim: 1
   num_layers: 5
