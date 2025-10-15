@@ -23,6 +23,7 @@ federated_learning:
   weights_buffer_size: 5
   
 security_manager:
+  logging_level: ${logging_level}
   buffer_size: 10000
   batch_size: 32
   learning_rate: 0.001
