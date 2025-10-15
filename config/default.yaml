@@ -13,6 +13,8 @@ wandb:
   kafka_broker_url: kafka:9092
   kafka_consumer_group_id: WANDBER
   kafka_auto_offset_reset: earliest
+  logging_level: ${logging_level}
+  kafka_topic_update_interval_secs: ${kafka_topic_update_interval_secs}
 
 federated_learning:
   aggregation_strategy: fedavg    # fedavg, fedyogi
