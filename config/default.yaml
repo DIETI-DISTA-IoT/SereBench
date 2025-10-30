@@ -68,10 +68,19 @@ default_vehicle_config:
   ping_thread_timeout: 5
   ping_host: google.com
   probe_frequency_seconds: 5
-  cpu_cores: "0,1,2,3,4,5,6,7,8,9,10,11"
-  # cpu_limit: 0.8
+  # CPU control parameters for container scheduling
+  # ------------------------------------------------
+  # cpu_period: The scheduling period for CPU time allocation (in microseconds).
+  #              Default: 100000 µs (100 ms). You want to keep this fella as is.
+  # cpu_quota:  The total CPU time available to the container per period.
+  #              Example: 80000 means 80% of ONE CPU core. (Even if the container can use more cores, he will use only 80% of ONE core!)
+  #              Set to -1 for no CPU limit (use full CPU capacity). YOU WANT TO KEEP THIS FELLA AT THIS VALUE.
+  # cpu_cores:  Comma-separated list of CPU cores available to the container.
+  #              Example: "0,1,2,3" restricts to cores 0–3.
+  #              Use "all" for all cores on a 12-core machine. You might experiment touching THIS value instead...
   cpu_period: 100000
-  cpu_quota: 80000  #calcolo cpu_quota = cpu_period * cpu_limit
+  cpu_quota: -1
+  cpu_cores: "all"
 
 # We have 19 (from 0 to 18) anomaly clusters and 15 diagnostics clusters (from 0 to 40)
 # Each vehicle can have different anomaly and diagnostics that prioritises when generating data.
@@ -228,8 +237,10 @@ default_consumer_config:
   training_freq_seconds: 0.5
   epoch_size: 20
   save_model_freq_epochs: 5
-  cpu_period: 100000
-  cpu_quota: 80000  #calcolo cpu_quota = cpu_period * cpu_limit
+  cpu_period: ${default_vehicle_config.cpu_period}
+  cpu_quota: ${default_vehicle_config.cpu_quota}
+  cpu_cores: ${default_vehicle_config.cpu_cores}
+
 
 
 anomaly_detection:

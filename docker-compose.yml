@@ -75,7 +75,7 @@ services:
     networks:
       - trains_network  # Connect the producer to the custom Docker network
     restart: unless-stopped
-    command: ["tail", "-f", "/dev/null"]
+    # command: ["tail", "-f", "/dev/null"] # decomment this line if you want to start the container without running any command
 
   dashboard:
     image: open_fair-dashboard:latest
