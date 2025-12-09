@@ -106,7 +106,7 @@ Use `docker compose up` to start the whole cluster:
 
 Otherwise, you can load different services separately:
 
-    docker compose up -d zookeeper kafka wandber 
+    docker compose up -d zookeeper kafka wandber dashboard
     
     docker compose up -d dashboard
 
