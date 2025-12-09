@@ -1,6 +1,7 @@
 
 override: ""
 mode: OF # OF (security metrics separated from sensors), SW (united paradigm)
+
 logging_level: info
 container_manager_port: 7777
 kafka_topic_update_interval_secs: 30
