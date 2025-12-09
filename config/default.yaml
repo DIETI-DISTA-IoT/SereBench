@@ -1,7 +1,6 @@
 
 override: ""
 mode: OF # OF (security metrics separated from sensors), SW (united paradigm)
-
 logging_level: info
 container_manager_port: 7777
 kafka_topic_update_interval_secs: 30
@@ -81,6 +80,12 @@ default_vehicle_config:
   cpu_period: 100000
   cpu_quota: -1
   cpu_cores: "all"
+  # Additional environment variables for every vehicle container (both producer and consumer)
+  # ADD HERE WHAT YOU NEED, THEN OVERWRITE ELSEWHERE...
+  common_env_vars:
+    http_proxy: ""
+    https_proxy: ""
+
 
 # We have 19 (from 0 to 18) anomaly clusters and 15 diagnostics clusters (from 0 to 40)
 # Each vehicle can have different anomaly and diagnostics that prioritises when generating data.
