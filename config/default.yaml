@@ -241,7 +241,7 @@ default_consumer_config:
   h_dim: 128
   num_layers: 3
   dropout: 0.1
-  optimizer: Adam
+  optimizer: SGD
   training_freq_seconds: 0.5
   epoch_size: 20
   save_model_freq_epochs: 5
@@ -252,11 +252,12 @@ default_consumer_config:
 
 
 anomaly_detection:
-  output_dim: 1
-  h_dim: 64
-  num_layers: 3
+  output_dim: 3
+  h_dim: 128
+  num_layers: 1
   layer_norm: True
-  input_dim: 59
+  dropout: 0.1
+  input_dim: 41
 
   
 dashboard:
