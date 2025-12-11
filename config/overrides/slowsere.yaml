@@ -2,7 +2,6 @@ wandb:
   run_name: SLOW_SW
 
 default_vehicle_config:
-  # The rate of information (i.e., time) is multiplied x 100 for the sake of speeding up the simulation
   mu_anomalies: 3
   mu_normal: 3
 

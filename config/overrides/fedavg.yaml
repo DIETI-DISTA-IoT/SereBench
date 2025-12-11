@@ -1,11 +1,6 @@
 wandb:
   run_name: fed_AVG
 
-default_vehicle_config:
-  # The rate of information (i.e., time) is multiplied x 100 for the sake of speeding up the simulation
-  mu_anomalies: 0.157
-  mu_normal: 0.117
-  
 federated_learning:
   aggregation_strategy: fedavg    # fedavg, fedyogi
   aggregation_interval_secs: 20     

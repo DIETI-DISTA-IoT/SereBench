@@ -1,16 +1,7 @@
-vehicles:
-  - angela
 
-  
 default_vehicle_config:
-  # The rate of information (i.e., time) is multiplied x 100 for the sake of speeding up the simulation
-  mu_anomalies: 0.157
-  mu_normal: 0.117
+
   # Additional environment variables for every vehicle container (both producer and consumer)
   common_env_vars:
     http_proxy: http://proxy.uninsubria.it:3128
     https_proxy: http://proxy.uninsubria.it:3128
-
-attack:
-  preconf_attacking_vehicles:
-    - angela

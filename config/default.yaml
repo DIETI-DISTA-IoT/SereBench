@@ -58,8 +58,9 @@ security_manager:
 
 default_vehicle_config:
   kafka_broker: kafka:9092
-  mu_anomalies: 157
-  mu_normal: 117
+# The rate of information (i.e., time) is divided by a factor of 100 wrt real time for the sake of speeding up the simulation
+  mu_anomalies: 0.157
+  mu_normal: 0.117
   alpha: 0.2
   beta: 1.9
   anomaly_classes: all
@@ -161,7 +162,9 @@ attack:
   delay: 0.001
   victim_container: zookeeper # be careful what you wish for...
   preconf_attacking_vehicles:
+    - angela
+    - bob
+    - claude
     - daniel
-    - frank
   automatic_attack_interval_secs: 8
   bot_port: 5002
