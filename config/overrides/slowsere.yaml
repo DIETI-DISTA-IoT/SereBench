@@ -1,5 +1,3 @@
-mode: SW
-
 wandb:
   run_name: SLOW_SW
 

@@ -98,7 +98,8 @@ services:
       # Bind-mount the host config directory into the container's /app/config
       - ./config:/app/config
     # command: ["tail", "-f", "/dev/null"] # decomment this line if you want to start the container without running any command
-    
+    # command: ["python", "app.py", "override=dev"] # decomment this line if you want to start the dash app with some overriding conf.
+
   producer_image:
     image: open_fair-producer:latest
     build:

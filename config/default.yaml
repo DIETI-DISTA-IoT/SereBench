@@ -86,145 +86,26 @@ default_vehicle_config:
   common_env_vars:
     http_proxy: ""
     https_proxy: ""
-  # Adversarial degree:
+  # Adversarial degree: (0,1,2,or,3)
   adversarial_degree: 1
 
 
-# We have 19 (from 0 to 18) anomaly clusters and 15 diagnostics clusters (from 0 to 40)
-# Each vehicle can have different anomaly and diagnostics that prioritises when generating data.
-# IF not "all" then, the explicit anomaly_classes and diagnostics_classes overwritten for each vehicle
-# will be generated at 80%, while the rest will divide the remaining 20%.
-# These percentages will normalise or contidion the prior probabilies of each class in the original dataset, which are the following:
-  # For anomalies:
-  # cluster  probability
-  # 0      0.464989   ***
-  # 1      0.019147   *
-  # 2      0.037746   *
-  # 3      0.028993   *
-  # 4      0.274617   **
-  # 5      0.028993   *
-  # 6      0.021882   *
-  # 7      0.025711   *
-  # 8      0.005470
-  # 9      0.008753
-  # 10     0.003282
-  # 11     0.004376
-  # 12     0.006565
-  # 13     0.018600
-  # 14     0.008206
-  # 15     0.012035   *
-  # 16     0.006565
-  # 17     0.007112
-  # 18     0.016958   *
-
-  # For diagnostics:
-  # cluster  probability
-  # cluster  probability
-  # 0      0.176524  ***
-  # 1      0.055505 *
-  # 2      0.014104 *
-  # 3      0.015014 *
-  # 4      0.006824
-  # 5      0.179254 ***
-  # 6      0.047771
-  # 7      0.156051 ***
-  # 8      0.120564 ***
-  # 9      0.148317 ***
-  # 10     0.011829 *
-  # 11     0.014104 *
-  # 12     0.014559 *
-  # 13     0.037307 *
-  # 14     0.002275
 vehicles:
   - angela:
-      anomaly_classes: 
-        - 0
-        - 4
-        - 1
-        - 5
-        - 8
-        - 9
-        - 10
-        - 11
-        - 12
-        - 13
-        - 14
-        - 16
-        - 17
-      diagnostics_classes:
-        - 0
-        - 5
-        - 7
-        - 1
-        - 2
-        - 4
-        - 6
-        - 14
-      cpu_cores: "0,1" 
-
+      cpu_cores: "0,1,2,3,4" 
+      adversarial_degree: 0
+  
   - bob:
-      anomaly_classes:
-        - 0 
-        - 4
-        - 2
-        - 6
-        - 8
-        - 9
-        - 10
-        - 11
-        - 12
-        - 13
-        - 14
-        - 16
-        - 17
-      diagnostics_classes:
-        - 0
-        - 5
-        - 8
-        - 3
-        - 10
-        - 4
-        - 6
-        - 14
-      cpu_cores: "2,3" 
-
+      cpu_cores: "5,6,7,8,9" 
+      adversarial_degree: 1
+  
   - claude:
-      anomaly_classes:
-        - 0
-        - 15
-        - 18
-        - 3
-        - 7
-        - 8
-        - 9
-        - 10
-        - 11
-        - 12
-        - 13
-        - 14
-        - 16
-        - 17
-      diagnostics_classes:
-        - 0
-        - 5
-        - 9
-        - 11
-        - 12
-        - 13
-        - 4
-        - 6
-        - 14
-      cpu_cores: "4,5" 
+      cpu_cores: "10,11,12,13,14" 
+      adversarial_degree: 2
 
   - daniel:
-      cpu_cores: "6,7" 
-
-  - emily:
-      cpu_cores: "8,9"
-
-  - frank:
-      cpu_cores: "10,11"
-
+      cpu_cores: "15,16,17,18,19" 
+      adversarial_degree: 3
 
 default_consumer_config:
   buffer_size: 5000
