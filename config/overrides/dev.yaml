@@ -1,6 +1,7 @@
 
 default_vehicle_config:
 
+  adversarial_training: True
   # Additional environment variables for every vehicle container (both producer and consumer)
   common_env_vars:
     http_proxy: http://proxy.uninsubria.it:3128
