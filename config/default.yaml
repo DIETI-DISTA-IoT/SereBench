@@ -130,6 +130,8 @@ default_consumer_config:
   cpu_period: ${default_vehicle_config.cpu_period}
   cpu_quota: ${default_vehicle_config.cpu_quota}
   cpu_cores: ${default_vehicle_config.cpu_cores}
+  adversarial_degree: ${default_vehicle_config.adversarial_degree}
+  adversarial_training: ${default_vehicle_config.adversarial_training}
 
 
 
