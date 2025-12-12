@@ -89,7 +89,7 @@ default_vehicle_config:
     https_proxy: ""
   # Adversarial degree: (0,1,2,or,3)
   adversarial_degree: 1
-
+  adversarial_training: False
 
 vehicles:
   - angela:
