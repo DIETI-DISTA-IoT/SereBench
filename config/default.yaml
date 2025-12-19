@@ -78,7 +78,7 @@ default_vehicle_config:
   #              Set to -1 for no CPU limit (use full CPU capacity). YOU WANT TO KEEP THIS FELLA AT THIS VALUE.
   # cpu_cores:  Comma-separated list of CPU cores available to the container.
   #              Example: "0,1,2,3" restricts to cores 0–3.
-  #              Use "all" for all cores on a 12-core machine. You might experiment touching THIS value instead...
+  #              Use "all" for all cores on a machine. You might experiment touching THIS value instead...
   cpu_period: 100000
   cpu_quota: -1
   cpu_cores: "all"
@@ -117,14 +117,7 @@ default_consumer_config:
   diagnostics_classes: all
   weights_push_freq_seconds: 180
   weights_pull_freq_seconds: 180
-  learning_rate: 0.002
-  initialization_strategy: xavier
-  output_dim: 1
-  h_dim: 128
-  num_layers: 3
-  dropout: 0.1
-  optimizer: SGD
-  training_freq_seconds: 0.5
+  training_freq_seconds: 0.15
   epoch_size: 20
   save_model_freq_epochs: 5
   cpu_period: ${default_vehicle_config.cpu_period}
@@ -142,6 +135,9 @@ anomaly_detection:
   layer_norm: True
   dropout: 0.1
   input_dim: 40
+  learning_rate: 0.05
+  initialization_strategy: xavier
+  optimizer: SGD
 
   
 dashboard:
@@ -168,5 +164,5 @@ attack:
     - bob
     - claude
     - daniel
-  automatic_attack_interval_secs: 30
+  automatic_attack_interval_secs: 8
   bot_port: 5002
