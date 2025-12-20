@@ -1,7 +1,7 @@
 
 default_vehicle_config:
 
-  # adversarial_training: True
+  adversarial_training: True
   # Additional environment variables for every vehicle container (both producer and consumer)
   common_env_vars:
     http_proxy: http://proxy.uninsubria.it:3128
@@ -14,13 +14,13 @@ vehicles:
       Bp_std: 0
   
   - bob:
-      Mp_std: 1
-      Bp_std: 1
+      Mp_std: 0.7
+      Bp_std: 0.7
   
   - claude:
-      Mp_std: 2
-      Bp_std: 2
+      Mp_std: 1.4
+      Bp_std: 1.4
 
   - daniel:
-      Mp_std: 3
-      Bp_std: 3
+      Mp_std: 2.1
+      Bp_std: 2.1
