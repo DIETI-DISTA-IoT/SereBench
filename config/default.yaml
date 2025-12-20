@@ -17,9 +17,10 @@ wandb:
   kafka_topic_update_interval_secs: ${kafka_topic_update_interval_secs}
 
 federated_learning:
+  logging_level: ${logging_level}
   aggregation_strategy: fedavg    # fedavg, fedyogi
   initialization_strategy: xavier   # xavier, he, normal
-  aggregation_interval_secs: 30     
+  aggregation_interval_secs: 25     
   weights_buffer_size: 5
   
 security_manager:
@@ -58,7 +59,7 @@ security_manager:
 
 default_vehicle_config:
   kafka_broker: kafka:9092
-# The rate of information (i.e., time) is divided by a factor of 100 wrt real time for the sake of speeding up the simulation
+  # The rate of information (i.e., time) is divided by a factor of 100 wrt real time for the sake of speeding up the simulation
   mu_anomalies: 0.157
   mu_normal: 0.117
   alpha: 0.2
@@ -121,8 +122,8 @@ default_consumer_config:
   kafka_auto_offset_reset: earliest
   anomaly_classes: all
   diagnostics_classes: all
-  weights_push_freq_seconds: 180
-  weights_pull_freq_seconds: 180
+  weights_push_freq_seconds: 40
+  weights_pull_freq_seconds: 60
   training_freq_seconds: 0.15
   epoch_size: 20
   save_model_freq_epochs: 5
@@ -130,7 +131,6 @@ default_consumer_config:
   cpu_quota: ${default_vehicle_config.cpu_quota}
   cpu_cores: ${default_vehicle_config.cpu_cores}
   adversarial_training: ${default_vehicle_config.adversarial_training}
-
 
 
 anomaly_detection:
