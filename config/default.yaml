@@ -131,7 +131,7 @@ default_consumer_config:
   cpu_quota: ${default_vehicle_config.cpu_quota}
   cpu_cores: ${default_vehicle_config.cpu_cores}
   adversarial_training: ${default_vehicle_config.adversarial_training}
-
+  seed: 777
 
 anomaly_detection:
   output_dim: 3
