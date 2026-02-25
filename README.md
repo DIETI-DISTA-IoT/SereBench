@@ -15,7 +15,7 @@ by _Alessandra Rizzardi, Raffaele Della Corte, Jesus F. Cevallos M., Simona De V
 This is a nested repo, so be sure to clone the repo recursively, using the `--recursive` flag with the `git clone` command. Here's the syntax:
 
 ```bash
-git clone --recursive https://github.com/DIETI-DISTA-IoT/SereWay
+git clone --recursive https://github.com/DIETI-DISTA-IoT/SereBench
 ```
 
 This will clone the repository and all its submodules.
