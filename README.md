@@ -3,7 +3,7 @@
 
 This is the official implementation of the paper:
 
- ## *Adversarial Robustness Benchmarking for Security and Reliability Event Classification in Networked Railway CPS*
+ ## SereBench *Adversarial Robustness Benchmarking for Security and Reliability Event Classification in Networked Railway CPS*
 
 by _Alessandra Rizzardi, Raffaele Della Corte, Jesus F. Cevallos M., Simona De Vivo, Sabrina Sicari, Domenico Cotroneo, and Alberto Coen-Porisini_
 
