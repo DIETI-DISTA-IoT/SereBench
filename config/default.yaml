@@ -18,10 +18,17 @@ wandb:
 
 federated_learning:
   logging_level: ${logging_level}
-  aggregation_strategy: fedavg    # fedavg, fedyogi
+  aggregation_strategy: fedavg    # fedavg, fedyogi, fedmedian, fedprox
   initialization_strategy: xavier   # xavier, he, normal
   aggregation_interval_secs: 25     
   weights_buffer_size: 5
+  # Server-side learning rate — used by adaptive strategies (fedyogi).
+  # Has no effect when aggregation_strategy is fedavg, fedmedian, or fedprox.
+  learning_rate: 0.01
+  # FedYogi moment hyperparameters (Reddi et al., 2020)
+  yogi_beta1: 0.9
+  yogi_beta2: 0.999
+  yogi_epsilon: 0.001
   
 security_manager:
   logging_level: ${logging_level}
@@ -132,8 +139,11 @@ default_consumer_config:
   cpu_cores: ${default_vehicle_config.cpu_cores}
   adversarial_training: ${default_vehicle_config.adversarial_training}
   seed: 777
+  # FedProx proximal coefficient. Set to 0.0 to disable (recovers FedAvg behaviour).
+  # Only takes effect when aggregation_strategy is fedprox.
+  fedprox_mu: 0.0
 
-anomaly_detection:
+anomalydetection:
   output_dim: 3
   h_dim: 128
   num_layers: 1

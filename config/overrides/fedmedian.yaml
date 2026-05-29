@@ -1,14 +1,10 @@
 wandb:
-  run_name: fed_YOGI
+  run_name: fed_MEDIAN
 
 
 federated_learning:
-  aggregation_strategy: fedyogi
+  aggregation_strategy: fedmedian
   aggregation_interval_secs: 20
-  learning_rate: 0.01   # server-side adaptive LR for FedYogi
-  yogi_beta1: 0.9
-  yogi_beta2: 0.999
-  yogi_epsilon: 0.001
 
 
 default_consumer_config:
