@@ -139,11 +139,10 @@ default_consumer_config:
   cpu_cores: ${default_vehicle_config.cpu_cores}
   adversarial_training: ${default_vehicle_config.adversarial_training}
   seed: 777
-  # FedProx proximal coefficient. Set to 0.0 to disable (recovers FedAvg behaviour).
-  # Only takes effect when aggregation_strategy is fedprox.
-  fedprox_mu: 0.0
+  # Only takes effect when aggregation_strategy is fedprox. (Setting to 0.0 recovers FedAvg behaviour).
+  fedprox_mu: 0.01
 
-anomalydetection:
+anomaly_detection:
   output_dim: 3
   h_dim: 128
   num_layers: 1
