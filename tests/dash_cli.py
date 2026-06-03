@@ -15,9 +15,10 @@ Typical workflow
 # 2. Initialise CLI state from Hydra config
 #    python tests/dash_cli.py init-config
 
-# 3. (optional) Inspect / tweak values
+# 3. (optional) Apply a pre-made override profile and/or tweak individual keys
+#    python tests/dash_cli.py apply-override fedyogi
+#    python tests/dash_cli.py set federated_learning.aggregation_interval_secs 30
 #    python tests/dash_cli.py show-config
-#    python tests/dash_cli.py set federated_learning.aggregation_strategy fedyogi
 
 # 4. Create vehicle containers, run the full experiment, then tear down
 #    python tests/dash_cli.py create-vehicles
@@ -106,6 +107,12 @@ class SereBenchCLI:
         assert isinstance(result, dict)
         return result
 
+    def list_override_profiles(self) -> list[str]:
+        overrides_dir = self.config_dir / "overrides"
+        if not overrides_dir.is_dir():
+            return []
+        return sorted(p.stem for p in overrides_dir.glob("*.yaml"))
+
     # ------------------------------------------------------------------
     # State persistence
     # ------------------------------------------------------------------
@@ -127,12 +134,9 @@ class SereBenchCLI:
         url = f"{self.base_url}{path}"
         print(f"[waiting] {method.upper()} {url} ...", flush=True)
         start = time.monotonic()
-        try:
-            response = self.session.request(
-                method=method, url=url, json=json_payload, timeout=self.timeout
-            )
-        except requests.RequestException as exc:
-            raise
+        response = self.session.request(
+            method=method, url=url, json=json_payload, timeout=self.timeout
+        )
         elapsed = time.monotonic() - start
         print(f"[done] HTTP {response.status_code} in {elapsed:.2f}s", flush=True)
 
@@ -142,6 +146,58 @@ class SereBenchCLI:
             body = response.text
 
         return HttpResult(method=method.upper(), url=url, status=response.status_code, body=body)
+
+
+# ------------------------------------------------------------------
+# Deep-merge (replicates OmegaConf.merge without requiring hydra)
+# ------------------------------------------------------------------
+
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge *override* into a copy of *base*.
+
+    - Dict values are merged recursively.
+    - All other types (scalars, lists) are replaced by the override value.
+    This matches OmegaConf.merge semantics used inside the dashboard container.
+    """
+    result = dict(base)
+    for key, override_val in override.items():
+        base_val = result.get(key)
+        if isinstance(base_val, dict) and isinstance(override_val, dict):
+            result[key] = deep_merge(base_val, override_val)
+        else:
+            result[key] = override_val
+    return result
+
+
+def load_override_file(config_dir: Path, name_or_path: str) -> tuple[dict[str, Any], Path]:
+    """Resolve a profile name or file path to a parsed YAML dict.
+
+    Accepts:
+      - a bare name like ``fedyogi``  → config/overrides/fedyogi.yaml
+      - a relative or absolute path   → used as-is
+    """
+    candidate = Path(name_or_path)
+    if candidate.suffix == ".yaml" or candidate.is_absolute() or "/" in name_or_path or "\\\\" in name_or_path:
+        resolved = candidate if candidate.is_absolute() else Path.cwd() / candidate
+    else:
+        resolved = config_dir / "overrides" / f"{name_or_path}.yaml"
+
+    if not resolved.exists():
+        raise FileNotFoundError(
+            f"Override file not found: {resolved}\n"
+            f"Run `list-overrides` to see available profiles."
+        )
+    data = yaml.safe_load(resolved.read_text()) or {}
+    return data, resolved
+
+
+def diff_states(before: dict[str, Any], after: dict[str, Any], label_before: str = "before", label_after: str = "after") -> str:
+    """Return a unified-diff string between two YAML state dicts."""
+    before_lines = yaml.safe_dump(before, sort_keys=True).splitlines(keepends=True)
+    after_lines = yaml.safe_dump(after, sort_keys=True).splitlines(keepends=True)
+    return "".join(
+        difflib.unified_diff(before_lines, after_lines, fromfile=label_before, tofile=label_after)
+    )
 
 
 # ------------------------------------------------------------------
@@ -360,14 +416,14 @@ def main() -> int:
     parser.add_argument(
         "--profile",
         default="",
-        help="config/overrides/<profile>.yaml to merge (e.g. dev, fedavg)",
+        help="config/overrides/<profile>.yaml to merge at init-config time (e.g. dev, fedavg)",
     )
     parser.add_argument(
         "--hydra-override",
         action="append",
         default=[],
         metavar="KEY=VALUE",
-        help="Additional Hydra override (repeatable)",
+        help="Additional Hydra override (repeatable, used with init-config)",
     )
     parser.add_argument("--timeout", type=int, default=120, help="HTTP timeout in seconds")
 
@@ -376,8 +432,33 @@ def main() -> int:
     # --- config management ---
     sub.add_parser("init-config", help="(Re)initialize CLI state from Hydra config")
     sub.add_parser("show-config", help="Print the current persisted config state")
+    sub.add_parser(
+        "list-overrides",
+        help="List available override profiles in config/overrides/",
+    )
 
-    p_set = sub.add_parser("set", help="Set a config value by dot-path (e.g. federated_learning.aggregation_strategy fedyogi)")
+    p_apply = sub.add_parser(
+        "apply-override",
+        help=(
+            "Deep-merge a config/overrides/<profile>.yaml into the persisted state. "
+            "Replicates what the container does at startup with 'override=<profile>'. "
+            "Accepts a bare profile name (e.g. fedyogi) or a path to any YAML file."
+        ),
+    )
+    p_apply.add_argument(
+        "profile",
+        help="Override profile name (e.g. fedyogi, dev) or path to a YAML file",
+    )
+    p_apply.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show the diff that would be applied without saving",
+    )
+
+    p_set = sub.add_parser(
+        "set",
+        help="Set a single config value by dot-path (e.g. federated_learning.aggregation_strategy fedyogi)",
+    )
     p_set.add_argument("key")
     p_set.add_argument("value", help="YAML/JSON scalar, list, or object")
 
@@ -403,7 +484,10 @@ def main() -> int:
     sub.add_parser("stop-wandb", help="Stop W&B logging")
 
     # --- security manager ---
-    sub.add_parser("start-security-manager", help="Start the security manager (sends security_manager config from state)")
+    sub.add_parser(
+        "start-security-manager",
+        help="Start the security manager (sends security_manager config from state)",
+    )
     sub.add_parser("stop-security-manager", help="Stop the security manager")
 
     # --- mitigation ---
@@ -458,10 +542,19 @@ def main() -> int:
     p_logs.add_argument("--interval-secs", type=int, default=5, help="Polling interval when --watch is set")
 
     # --- W&B monitor ---
-    p_wandb_mon = sub.add_parser("wandb-monitor", help="Poll W&B GraphQL API and print experiment metric summary")
-    p_wandb_mon.add_argument("--entity", default="", help="W&B entity (org/user). Falls back to state wandb.entity")
-    p_wandb_mon.add_argument("--project", default="", help="W&B project name. Falls back to state wandb.project_name")
-    p_wandb_mon.add_argument("--run-name", default="", help="W&B run display name. Falls back to state wandb.run_name")
+    p_wandb_mon = sub.add_parser(
+        "wandb-monitor",
+        help="Poll W&B GraphQL API and print experiment metric summary",
+    )
+    p_wandb_mon.add_argument(
+        "--entity", default="", help="W&B entity (org/user). Falls back to state wandb.entity"
+    )
+    p_wandb_mon.add_argument(
+        "--project", default="", help="W&B project name. Falls back to state wandb.project_name"
+    )
+    p_wandb_mon.add_argument(
+        "--run-name", default="", help="W&B run display name. Falls back to state wandb.run_name"
+    )
     p_wandb_mon.add_argument("--top-n-runs", type=int, default=50)
     p_wandb_mon.add_argument("--max-metrics", type=int, default=30)
     p_wandb_mon.add_argument("--watch", action="store_true", help="Continuously poll")
@@ -480,6 +573,20 @@ def main() -> int:
     )
 
     # ------------------------------------------------------------------
+    # list-overrides
+    # ------------------------------------------------------------------
+    if args.command == "list-overrides":
+        profiles = client.list_override_profiles()
+        if not profiles:
+            print(f"No override files found in {client.config_dir / 'overrides'}")
+            return 0
+        print(f"Available override profiles ({client.config_dir / 'overrides'}):")
+        for name in profiles:
+            print(f"  {name}")
+        print(f"\nUsage:  python tests/dash_cli.py apply-override <profile>")
+        return 0
+
+    # ------------------------------------------------------------------
     # init-config
     # ------------------------------------------------------------------
     if args.command == "init-config":
@@ -488,7 +595,7 @@ def main() -> int:
         client.save_state(state)
         print(f"Initialized config state at: {args.state_file}")
         print(f"Dashboard URL: {client.base_url}")
-        print("Tip: use `show-config`, `set`, `unset` to tune before sending requests.")
+        print("Tip: use `list-overrides`, `apply-override`, `set`, `unset` to tune before sending requests.")
         return 0
 
     # ------------------------------------------------------------------
@@ -502,7 +609,41 @@ def main() -> int:
         print(yaml.safe_dump(state, sort_keys=False))
         return 0
 
-    # Auto-init state if missing
+    # ------------------------------------------------------------------
+    # apply-override
+    # ------------------------------------------------------------------
+    if args.command == "apply-override":
+        state = client.load_state()
+        if not state:
+            print("No persisted state found. Run `init-config` first.")
+            return 1
+
+        try:
+            override_data, resolved_path = load_override_file(client.config_dir, args.profile)
+        except FileNotFoundError as exc:
+            print(str(exc))
+            return 1
+
+        merged = deep_merge(state, override_data)
+        diff = diff_states(state, merged, label_before="state (before)", label_after=f"state (after {args.profile})")
+
+        if not diff.strip():
+            print(f"Override '{args.profile}' produces no changes to the current state.")
+            return 0
+
+        print(f"Override file: {resolved_path}")
+        print("Changes that will be applied:")
+        print(diff)
+
+        if args.dry_run:
+            print("[dry-run] State NOT saved.")
+            return 0
+
+        client.save_state(merged)
+        print(f"Applied override '{args.profile}' and saved {args.state_file}")
+        return 0
+
+    # Auto-init state if missing (for all remaining commands)
     state = client.load_state()
     if not state and args.command not in {"health", "vehicle-status", "logs"}:
         if _HYDRA_AVAILABLE:
@@ -609,7 +750,7 @@ def main() -> int:
         return 0
 
     # ------------------------------------------------------------------
-    # logs (special: uses GET, streaming-friendly)
+    # logs
     # ------------------------------------------------------------------
     if args.command == "logs":
         path = f"/logs/{args.container_name}"
@@ -631,7 +772,7 @@ def main() -> int:
                         text = fetch_logs(last_ts)
                         if text.strip():
                             print(text, end="")
-                        last_ts = time.time() * 1000  # millis for next call
+                        last_ts = time.time() * 1000
                     except requests.RequestException as exc:
                         print(f"[warn] log fetch error: {exc}")
                     time.sleep(args.interval_secs)
@@ -649,41 +790,30 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Simple endpoint dispatch table
     # ------------------------------------------------------------------
-    # (method, path, payload_factory)
-    # payload_factory is a callable(state) -> dict | None
-    simple_routes: dict[str, tuple[str, str, Any]] = {
-        # health
-        "health": ("GET", "/health", None),
-        # vehicle lifecycle
-        "create-vehicles": ("POST", "/create-vehicles", None),
-        "delete-vehicles": ("POST", "/delete-vehicles", None),
-        # producers / consumers
-        "produce-all": ("POST", "/produce-all", None),
-        "stop-producing-all": ("POST", "/stop-producing-all", None),
-        "consume-all": ("POST", "/consume-all", None),
-        "stop-consuming-all": ("POST", "/stop-consuming-all", None),
-        # FL
-        "start-federated-learning": ("POST", "/start-federated-learning", None),
-        "stop-federated-learning": ("POST", "/stop-federated-learning", None),
-        # attacks
-        "start-automatic-attacks": ("POST", "/start-automatic-attacks", None),
-        "stop-automatic-attacks": ("POST", "/stop-automatic-attacks", None),
-        "start-preconf-attack": ("POST", "/start-preconf-attack", None),
-        "stop-preconf-attack": ("POST", "/stop-preconf-attack", None),
-        # mitigation
-        "start-mitigation": ("POST", "/start-mitigation", None),
-        "stop-mitigation": ("POST", "/stop-mitigation", None),
-        # wandb
-        "stop-wandb": ("POST", "/stop-wandb", None),
-        # security manager
-        "stop-security-manager": ("POST", "/stop-security-manager", None),
-        # experiment
-        "start-experiment": ("POST", "/start-experiment", None),
-        "shutdown": ("POST", "/shutdown", None),
+    simple_routes: dict[str, tuple[str, str]] = {
+        "health": ("GET", "/health"),
+        "create-vehicles": ("POST", "/create-vehicles"),
+        "delete-vehicles": ("POST", "/delete-vehicles"),
+        "produce-all": ("POST", "/produce-all"),
+        "stop-producing-all": ("POST", "/stop-producing-all"),
+        "consume-all": ("POST", "/consume-all"),
+        "stop-consuming-all": ("POST", "/stop-consuming-all"),
+        "start-federated-learning": ("POST", "/start-federated-learning"),
+        "stop-federated-learning": ("POST", "/stop-federated-learning"),
+        "start-automatic-attacks": ("POST", "/start-automatic-attacks"),
+        "stop-automatic-attacks": ("POST", "/stop-automatic-attacks"),
+        "start-preconf-attack": ("POST", "/start-preconf-attack"),
+        "stop-preconf-attack": ("POST", "/stop-preconf-attack"),
+        "start-mitigation": ("POST", "/start-mitigation"),
+        "stop-mitigation": ("POST", "/stop-mitigation"),
+        "stop-wandb": ("POST", "/stop-wandb"),
+        "stop-security-manager": ("POST", "/stop-security-manager"),
+        "start-experiment": ("POST", "/start-experiment"),
+        "shutdown": ("POST", "/shutdown"),
     }
 
     if args.command in simple_routes:
-        method, path, _ = simple_routes[args.command]
+        method, path = simple_routes[args.command]
         try:
             result = client.http(method, path)
         except requests.RequestException as exc:
