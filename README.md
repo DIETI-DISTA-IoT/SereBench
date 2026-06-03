@@ -70,16 +70,60 @@ Verify it works by executing `make --version`.
 
 ## Building vehicle images and dashboard:
 
-Use `make all` to build the producer and consumer docker images:
+Use `make all` to build all images from scratch:
 
     make all
 
-> **After the first build, to force a fast-rebuild of the image using fresh code:** You can use selective caching to accelerate building:
+### Rebuilding after code changes
+
+There are two selective-cache rebuild modes. Both skip the expensive base-image and system-package layers; the difference is whether Python dependencies are re-installed.
+
+#### `scache` — re-pull code **and** re-install pip dependencies
+
+Use this when you have modified `requirements.txt` in any subrepo, or when you have added a new Python library to the project code:
 
     make all-scache
 
-It will only update the container's code from the repository and not the dependencies when building the images.
+Or for a single service:
 
+    make build-producer-scache
+    make build-consumer-scache
+    make build-dashboard-scache
+    make build-wandber-scache
+
+Docker layer order (simplified):
+```
+[cached]  base image + apt packages
+[busted]  pip install -r requirements.txt   ← re-runs
+[busted]  git clone <app code>              ← re-runs
+[busted]  git clone of-core                 ← re-runs
+```
+
+#### `scache-nolib` — re-pull code only, **keep pip cache**
+
+Use this when your code changes do **not** introduce new libraries (the common case during development). The pip install layers are reused from the last full build, so only the git clones are repeated. This is significantly faster when packages like `torch` are involved:
+
+    make all-scache-nolib
+
+Or for a single service:
+
+    make build-producer-scache-nolib
+    make build-consumer-scache-nolib
+    make build-dashboard-scache-nolib
+    make build-wandber-scache-nolib
+
+Docker layer order (simplified):
+```
+[cached]  base image + apt packages
+[cached]  pip install -r requirements.txt   ← reused from last build
+[busted]  git clone <app code>              ← re-runs
+[busted]  git clone of-core                 ← re-runs
+```
+
+> **How it works:** Each Dockerfile now contains two `ARG` placeholders at different positions.
+> `CACHE_BUST` sits before the `pip install` step — passing a fresh timestamp invalidates pip and everything below it (`scache`).
+> `CODE_BUST` sits after `pip install` but before the `git clone` steps — passing only this timestamp leaves pip cached and only re-runs the clones (`scache-nolib`).
+> `requirements.txt` is copied from the checked-out submodule directory in the build context (not from the git clone inside Docker), so pip can run before the clone.
 
 ### Launching:
 
