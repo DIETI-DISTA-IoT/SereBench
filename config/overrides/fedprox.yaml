@@ -1,0 +1,17 @@
+wandb:
+  run_name: fed_PROX
+
+
+federated_learning:
+  aggregation_strategy: fedprox
+  aggregation_interval_secs: 20
+
+
+default_consumer_config:
+  weights_push_freq_seconds: 120
+  weights_pull_freq_seconds: 120
+  learning_rate: 0.002
+  # Proximal coefficient mu: controls how tightly local updates are anchored
+  # to the global model. Larger values = less drift, stronger regularisation.
+  # Typical range: 0.001 – 0.1. Set to 0.0 to recover plain FedAvg behaviour.
+  fedprox_mu: 0.01
