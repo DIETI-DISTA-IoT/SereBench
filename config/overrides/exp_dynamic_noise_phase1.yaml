@@ -1,0 +1,29 @@
+# Experiments 5 & 6 — dynamic-noise-fl / dynamic-noise-nofl  (phase 1 config)
+#
+# Angela starts at noise=0.  At the midpoint of the run the experiment runner
+# calls POST /update-vehicle-noise on the dashboard to switch angela to
+# Mp_std=1.0 / Bp_std=1.0 (phase 2).  If that endpoint is not yet implemented
+# the dashboard code must be extended; see the NOTE in tests/experiments.py.
+#
+# Bob, Claude and Daniel run at noise=1.0 throughout with adversarial training.
+
+vehicles:
+  - angela:
+      Mp_std: 0.0
+      Bp_std: 0.0
+      adversarial_training: False
+
+  - bob:
+      Mp_std: 1.0
+      Bp_std: 1.0
+      adversarial_training: True
+
+  - claude:
+      Mp_std: 1.0
+      Bp_std: 1.0
+      adversarial_training: True
+
+  - daniel:
+      Mp_std: 1.0
+      Bp_std: 1.0
+      adversarial_training: True

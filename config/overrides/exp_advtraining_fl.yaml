@@ -1,0 +1,31 @@
+# Experiments 4 & 8 — advtraining-fl / advtraining-fl-seed
+#
+# Setup (from the paper):
+#   - Uniform noise level of 1.0 for all vehicles.
+#   - Bob, Claude and Daniel have adversarial_training=True.
+#   - Angela trains clean (adversarial_training=False) to test whether FL
+#     transfers robustness from the adversarially-trained peers.
+#
+# The 'vehicles' list REPLACES the default list entirely when deep-merged,
+# so all four vehicles must be listed here.
+
+vehicles:
+  - angela:
+      Mp_std: 1.0
+      Bp_std: 1.0
+      adversarial_training: False
+
+  - bob:
+      Mp_std: 1.0
+      Bp_std: 1.0
+      adversarial_training: True
+
+  - claude:
+      Mp_std: 1.0
+      Bp_std: 1.0
+      adversarial_training: True
+
+  - daniel:
+      Mp_std: 1.0
+      Bp_std: 1.0
+      adversarial_training: True
