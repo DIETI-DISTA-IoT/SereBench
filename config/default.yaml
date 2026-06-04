@@ -86,7 +86,7 @@ default_vehicle_config:
   #              Example: 80000 means 80% of ONE CPU core. (Even if the container can use more cores, he will use only 80% of ONE core!)
   #              Set to -1 for no CPU limit (use full CPU capacity). YOU WANT TO KEEP THIS FELLA AT THIS VALUE.
   # cpu_cores:  Comma-separated list of CPU cores available to the container.
-  #              Example: "0,1,2,3" restricts to cores 0–3.
+  #              Example: "0,1,2,3" restricts to cores 0-3.
   #              Use "all" for all cores on a machine. You might experiment touching THIS value instead...
   cpu_period: 100000
   cpu_quota: -1
@@ -100,6 +100,10 @@ default_vehicle_config:
   Mp_std: 0
   Bp_std: 0
   adversarial_training: False
+  # Seed for the Train simulator RNG. Controls the data-generation sequence
+  # so that experiments are reproducible across runs with the same seed.
+  # Overridden per-run by experiments.py via 'set default_vehicle_config.seed <value>'.
+  seed: 42
 
 
 vehicles:
