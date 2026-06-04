@@ -8,7 +8,7 @@ kafka_topic_update_interval_secs: 30
 
 wandb:
   online: true
-  project_name: OPEN_FAIR
+  project_name: SereBench
   run_name: My_awesomre_FAIR_run
   group: AWESOME_GROUP
   kafka_broker_url: kafka:9092
