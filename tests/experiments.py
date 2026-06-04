@@ -17,15 +17,24 @@ Experiment matrix
                            all vehicles; only bob/claude/daniel train adversarially,
                            angela trains clean.
   5. dynamic-noise-fl      FL; angela starts at noise=0, then noise=1.0 is
-                           injected at ~50% of run duration.
+                           injected at ~50% of run duration via POST /reset-noise.
   6. dynamic-noise-nofl    Same as 5 but without FL.
   7. noadvtraining-fl-seed Experiment 3 repeated with a fixed shared seed for all
                            vehicles (faster FL convergence baseline).
   8. advtraining-fl-seed   Experiment 4 repeated with a fixed shared seed.
 
-Usage
------
-  # All 8 experiments, 5 seeds each (default ~40 h at 1 h/run)
+Pre-requisites
+--------------
+Before running this script, vehicle containers must already exist:
+
+    python tests/dash_cli.py create-vehicles
+
+This only needs to be done ONCE.  The runner does NOT create or delete vehicles
+between runs — it only starts and stops the services running inside them.
+
+Typical usage
+-------------
+  # All 8 experiments, 5 seeds each (~40 h at 1 h/run)
   python tests/experiments.py
 
   # Specific experiments only
@@ -34,15 +43,33 @@ Usage
   # Fewer seeds for a quick sanity check
   python tests/experiments.py --seeds 42 123 --run-duration 600
 
+  # Continue past failures instead of aborting
+  python tests/experiments.py --skip-on-error
+
   # Custom dashboard URL
   python tests/experiments.py --base-url http://192.168.1.10:5000
 
+Startup order (per run)
+-----------------------
+  start-wandb          (synchronous; timeout 120 s — W&B can be slow to connect)
+  produce-all          (synchronous; producers start streaming)
+  sleep 15 s
+  start-automatic-attacks  (synchronous)
+  sleep 15 s
+  consume-all          (synchronous; consumers start processing the live stream)
+  sleep 10 s
+  start-federated-learning  (synchronous; only for FL experiments)
+  --- experiment runs for --run-duration seconds ---
+  shutdown             (synchronous, sequential teardown inside the dashboard)
+
+Vehicle containers are NOT touched between runs.
+
 Dynamic-noise experiments (5 & 6)
 ----------------------------------
-At the midpoint of each run the script attempts to update angela's noise level
-to 1.0 by POSTing to the dashboard endpoint POST /update-vehicle-noise.  If that
-endpoint is not yet implemented the call fails gracefully (warning printed, run
-continues with original noise level) and you can perform the injection manually.
+At the midpoint of each run the script POSTs to POST /reset-noise on the
+dashboard to switch angela from noise=0 to Mp_std=Bp_std=1.0.  This endpoint
+already exists in the dashboard (app.py).  If the request fails for any reason
+a clear warning is printed and the run continues at the original noise level.
 """
 
 from __future__ import annotations
@@ -70,8 +97,15 @@ DASH_CLI = REPO_ROOT / "tests" / "dash_cli.py"
 
 DEFAULT_SEEDS = [42, 123, 456, 789, 1234]
 DEFAULT_RUN_DURATION_SECS = 3600     # 1 hour per run
-INIT_DELAY_SECS = 15                  # wait after create-vehicles before producing
-INTER_RUN_DELAY_SECS = 30             # wait between successive runs for containers to settle
+INTER_RUN_DELAY_SECS = 30             # cooldown between successive runs
+
+# Delays within the startup sequence (seconds)
+_DELAY_AFTER_PRODUCE = 15
+_DELAY_AFTER_ATTACKS = 15
+_DELAY_AFTER_CONSUME  = 10
+
+# Timeout for the start-wandb step specifically — W&B can be slow to initialise
+_WANDB_TIMEOUT_SECS = 120
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +115,8 @@ INTER_RUN_DELAY_SECS = 30             # wait between successive runs for contain
 #   name          : W&B group name and run-name prefix
 #   fl            : whether to start federated learning
 #   override      : config/overrides/<name>.yaml to apply (None = use defaults)
-#   dynamic_noise : whether to inject mid-run noise into angela's producer
-#   fixed_seed    : if True, all runs use seed=777 (same-init FL baseline)
+#   dynamic_noise : whether to inject mid-run noise into angela via /reset-noise
+#   fixed_seed    : if True, use FIXED_SEED for all runs (same-init FL baseline)
 EXPERIMENTS: dict[int, dict] = {
     1: {
         "name": "noadvtraining-nofl",
@@ -164,16 +198,26 @@ EXPERIMENTS: dict[int, dict] = {
     },
 }
 
-# Seed used for experiments 7 & 8 (same-init FL baseline)
+# Seed value used for experiments 7 & 8 (all vehicles share this initialisation)
 FIXED_SEED = 777
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# CLI helper
 # ---------------------------------------------------------------------------
 
 def _cli(*args: str, base_url: str, timeout: int = 180) -> None:
-    """Run a dash_cli.py command, raise RuntimeError on non-zero exit."""
+    """Run one dash_cli.py command and wait for it to complete.
+
+    Execution is fully synchronous: this function blocks until the underlying
+    HTTP request to the dashboard returns (or the timeout is hit).  The
+    dashboard routes themselves are synchronous — they only return 200 once
+    the requested action has been dispatched (e.g. all producers have
+    acknowledged the start command).  We therefore never issue the next step
+    before the current one has completed.
+
+    Raises RuntimeError if the command exits with a non-zero status code.
+    """
     cmd = [
         sys.executable, str(DASH_CLI),
         "--base-url", base_url,
@@ -183,61 +227,73 @@ def _cli(*args: str, base_url: str, timeout: int = 180) -> None:
     print(f"  [cli] {label}", flush=True)
     result = subprocess.run(cmd, text=True, capture_output=False)
     if result.returncode != 0:
-        raise RuntimeError(f"dash_cli command failed: {label}")
+        raise RuntimeError(f"dash_cli command failed (exit {result.returncode}): {label}")
 
+
+# ---------------------------------------------------------------------------
+# Sleep helper
+# ---------------------------------------------------------------------------
 
 def _sleep(seconds: int, label: str) -> None:
-    """Sleep with a simple countdown printed every 60 s."""
-    print(f"  [wait] {label} ({seconds}s)", flush=True)
+    """Sleep for *seconds* with a progress line printed every 60 s."""
+    print(f"  [wait] {label} ({seconds}s) ...", flush=True)
     end = time.monotonic() + seconds
-    interval = min(60, seconds)
+    tick = min(60, seconds)
     while True:
         remaining = end - time.monotonic()
         if remaining <= 0:
             break
-        time.sleep(min(interval, remaining))
+        time.sleep(min(tick, remaining))
         remaining = end - time.monotonic()
-        if remaining > 0:
-            print(f"  [wait] {remaining:.0f}s remaining ...", flush=True)
+        if remaining > 5:
+            print(f"  [wait] {remaining:.0f}s remaining", flush=True)
     print(f"  [wait] done.", flush=True)
 
 
-def _inject_angela_noise(base_url: str, mp_std: float = 1.0, bp_std: float = 1.0) -> None:
-    """Attempt to update angela's noise level at runtime via the dashboard API.
+# ---------------------------------------------------------------------------
+# Dynamic noise injection
+# ---------------------------------------------------------------------------
 
-    The dashboard must expose POST /update-vehicle-noise with JSON payload::
+def _inject_angela_noise(base_url: str, mp_std: float = 1.0, bp_std: float = 1.0) -> None:
+    """Switch angela's adversarial noise level at runtime via POST /reset-noise.
+
+    The dashboard already exposes this endpoint (app.py).  The payload format
+    expected by the server is::
 
         {"vehicle_name": "angela", "Mp_std": <float>, "Bp_std": <float>}
 
-    If the endpoint is absent (404) or the request fails, a warning is printed
-    and the run continues unchanged.
+    If the call fails for any reason (network error, unexpected status) a
+    warning is printed and the run continues at the original noise level.
     """
-    url = f"{base_url.rstrip('/')}/update-vehicle-noise"
+    url = f"{base_url.rstrip('/')}/reset-noise"
     payload = {"vehicle_name": "angela", "Mp_std": mp_std, "Bp_std": bp_std}
     print(
-        f"  [noise] Attempting runtime noise injection for angela "
+        f"  [noise] Injecting noise into angela "
         f"(Mp_std={mp_std}, Bp_std={bp_std}) via {url} ...",
         flush=True,
     )
     try:
         resp = requests.post(url, json=payload, timeout=30)
-        if resp.status_code == 200:
-            print("  [noise] Injection succeeded.", flush=True)
+        if resp.ok:
+            print("  [noise] Noise injection succeeded.", flush=True)
         else:
             print(
-                f"  [noise] WARNING: endpoint returned HTTP {resp.status_code}. "
-                "Dynamic noise injection was NOT applied. "
-                "Implement POST /update-vehicle-noise in the dashboard to enable it.",
+                f"  [noise] WARNING: /reset-noise returned HTTP {resp.status_code} — "
+                f"{resp.text[:200]}. "
+                "Dynamic noise injection was NOT applied for this run.",
                 flush=True,
             )
     except requests.RequestException as exc:
         print(
-            f"  [noise] WARNING: noise injection request failed ({exc}). "
-            "Dynamic noise injection was NOT applied. "
-            "Implement POST /update-vehicle-noise in the dashboard to enable it.",
+            f"  [noise] WARNING: /reset-noise request failed ({exc}). "
+            "Dynamic noise injection was NOT applied for this run.",
             flush=True,
         )
 
+
+# ---------------------------------------------------------------------------
+# Single-run execution
+# ---------------------------------------------------------------------------
 
 def _run_one(
     exp: dict,
@@ -246,65 +302,95 @@ def _run_one(
     run_duration: int,
     base_url: str,
 ) -> None:
-    """Execute a single experiment run (one seed)."""
+    """Execute one experiment run (one seed value).
+
+    Vehicle containers are assumed to already exist.  This function only
+    starts and stops the services running inside them.
+    """
     name = exp["name"]
     run_name = f"{name}_seed{seed}_run{run_idx}"
+
     print(f"\n{'='*60}", flush=True)
-    print(f"  Experiment : {name}", flush=True)
-    print(f"  Run        : {run_idx}  (seed={seed})", flush=True)
-    print(f"  W&B name   : {run_name}", flush=True)
-    print(f"  Duration   : {run_duration}s", flush=True)
-    print(f"  FL         : {exp['fl']}", flush=True)
-    print(f"  Adv noise  : {exp['dynamic_noise']}", flush=True)
+    print(f"  Experiment  : {name}", flush=True)
+    print(f"  Description : {exp['description']}", flush=True)
+    print(f"  Run index   : {run_idx}  (seed={seed})", flush=True)
+    print(f"  W&B run name: {run_name}", flush=True)
+    print(f"  Duration    : {run_duration}s  (~{run_duration/3600:.2f} h)", flush=True)
+    print(f"  FL          : {exp['fl']}", flush=True)
+    print(f"  Dynamic noise: {exp['dynamic_noise']}", flush=True)
     print(f"{'='*60}", flush=True)
 
-    def cli(*args: str) -> None:
-        _cli(*args, base_url=base_url)
+    def cli(*args: str, timeout: int = 180) -> None:
+        _cli(*args, base_url=base_url, timeout=timeout)
 
-    # 1. Initialise CLI state from default config
+    # ------------------------------------------------------------------
+    # 1. Configure CLI state
+    # ------------------------------------------------------------------
     cli("init-config")
 
-    # 2. Apply experiment-specific override (vehicle noise & adversarial_training)
     if exp["override"]:
         cli("apply-override", exp["override"])
 
-    # 3. Per-run parameter overrides
     effective_seed = FIXED_SEED if exp["fixed_seed"] else seed
     cli("set", "default_consumer_config.seed", str(effective_seed))
     cli("set", "wandb.run_name", run_name)
-    # Store group name so W&B runs can be filtered by experiment
     cli("set", "wandb.group", name)
 
-    # 4. Create vehicle containers
-    cli("create-vehicles")
-    _sleep(INIT_DELAY_SECS, "waiting for containers to initialise")
+    # ------------------------------------------------------------------
+    # 2. Start W&B logger first — so no metrics are missed
+    #    W&B can take a while to initialise; use a dedicated generous timeout.
+    # ------------------------------------------------------------------
+    cli("start-wandb", timeout=_WANDB_TIMEOUT_SECS)
 
-    # 5. Start producers, consumers, W&B logger
+    # ------------------------------------------------------------------
+    # 3. Start producers — data must flow before consumers or FL start
+    # ------------------------------------------------------------------
     cli("produce-all")
-    cli("consume-all")
-    cli("start-wandb")
+    _sleep(_DELAY_AFTER_PRODUCE, "letting producers warm up")
 
-    # 6. Optionally start federated learning
+    # ------------------------------------------------------------------
+    # 4. Start automatic attacks — so attack-class data is present in the
+    #    stream before consumers begin classifying
+    # ------------------------------------------------------------------
+    cli("start-automatic-attacks")
+    _sleep(_DELAY_AFTER_ATTACKS, "letting attack stream stabilise")
+
+    # ------------------------------------------------------------------
+    # 5. Start consumers — they now find an active, mixed-class data stream
+    # ------------------------------------------------------------------
+    cli("consume-all")
+    _sleep(_DELAY_AFTER_CONSUME, "letting consumers initialise")
+
+    # ------------------------------------------------------------------
+    # 6. Start federated learning (FL experiments only)
+    # ------------------------------------------------------------------
     if exp["fl"]:
         cli("start-federated-learning")
 
-    # 7. Run — with optional mid-run noise injection for experiments 5 & 6
+    # ------------------------------------------------------------------
+    # 7. Run — with optional mid-run noise injection (experiments 5 & 6)
+    # ------------------------------------------------------------------
     if exp["dynamic_noise"]:
         half = run_duration // 2
-        _sleep(half, "phase 1 (angela noise=0)")
+        _sleep(half, "phase 1 — angela noise=0")
         _inject_angela_noise(base_url, mp_std=1.0, bp_std=1.0)
-        _sleep(run_duration - half, "phase 2 (angela noise=1.0)")
+        _sleep(run_duration - half, "phase 2 — angela noise=1.0")
     else:
         _sleep(run_duration, "experiment running")
 
+    # ------------------------------------------------------------------
     # 8. Graceful shutdown
+    #    The /shutdown endpoint in app.py already performs a sequential,
+    #    ordered teardown with sleeps between each step:
+    #      stop_security_manager -> stop_fl -> stop_consumers ->
+    #      stop_producers -> stop_attacks -> stop_wandb
+    #    It is synchronous and returns only when all steps are done.
+    # ------------------------------------------------------------------
     cli("shutdown")
-    _sleep(INIT_DELAY_SECS, "waiting for shutdown to complete")
+    # Vehicle containers are intentionally NOT deleted here.
+    # They are reused across runs; delete them manually when done.
 
-    # 9. Remove vehicle containers
-    cli("delete-vehicles")
-
-    print(f"  [ok] Run {run_name} completed.\n", flush=True)
+    print(f"  [ok] Run '{run_name}' complete.\n", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +418,7 @@ def main() -> int:
         type=int,
         default=DEFAULT_SEEDS,
         metavar="S",
-        help=f"Random seeds / run indices (default: {DEFAULT_SEEDS}).",
+        help=f"Random seeds — one independent run per seed (default: {DEFAULT_SEEDS}).",
     )
     parser.add_argument(
         "--run-duration",
@@ -350,8 +436,8 @@ def main() -> int:
         "--skip-on-error",
         action="store_true",
         help=(
-            "If a run fails, log the error and continue to the next run "
-            "instead of aborting the entire batch."
+            "Log failures and continue to the next run instead of aborting "
+            "the whole batch."
         ),
     )
     args = parser.parse_args()
@@ -360,13 +446,16 @@ def main() -> int:
     completed = 0
     failed: list[str] = []
 
-    print(f"SereBench experiment runner")
-    print(f"  Experiments : {args.experiments}")
-    print(f"  Seeds       : {args.seeds}")
-    print(f"  Total runs  : {total}")
-    print(f"  Run duration: {args.run_duration}s  (~{args.run_duration/3600:.1f} h)")
-    print(f"  Dashboard   : {args.base_url}")
-    print()
+    print("SereBench experiment runner")
+    print(f"  Experiments  : {args.experiments}")
+    print(f"  Seeds        : {args.seeds}")
+    print(f"  Total runs   : {total}")
+    print(f"  Run duration : {args.run_duration}s  (~{args.run_duration/3600:.1f} h)")
+    print(f"  Dashboard    : {args.base_url}")
+    print(
+        "\nNOTE: vehicle containers must already exist before running this script.\n"
+        "      If they don't, run:  python tests/dash_cli.py create-vehicles\n"
+    )
 
     for exp_id, seed in ((e, s) for e in args.experiments for s in args.seeds):
         exp = EXPERIMENTS[exp_id]
@@ -383,38 +472,40 @@ def main() -> int:
             completed += 1
         except Exception:  # noqa: BLE001
             tb = traceback.format_exc()
-            msg = f"Run {run_label} FAILED:\n{tb}"
-            print(f"\n[ERROR] {msg}", flush=True)
+            print(f"\n[ERROR] Run '{run_label}' FAILED:\n{tb}", flush=True)
             failed.append(run_label)
             if not args.skip_on_error:
                 print(
-                    "Aborting batch. Re-run with --skip-on-error to continue past failures.",
+                    "Aborting batch.  Re-run with --skip-on-error to continue past failures.",
                     flush=True,
                 )
                 return 1
-            # Best-effort cleanup before next run
+            # Best-effort cleanup so the next run starts with a clean state.
+            # We do NOT delete vehicles.
+            print("  [cleanup] Attempting best-effort shutdown before next run ...", flush=True)
             try:
-                import subprocess as _sp
-                _sp.run(
-                    [sys.executable, str(DASH_CLI), "--base-url", args.base_url, "shutdown"],
-                    timeout=60,
-                )
-                _sp.run(
-                    [sys.executable, str(DASH_CLI), "--base-url", args.base_url, "delete-vehicles"],
-                    timeout=60,
+                subprocess.run(
+                    [
+                        sys.executable, str(DASH_CLI),
+                        "--base-url", args.base_url,
+                        "--timeout", "60",
+                        "shutdown",
+                    ],
+                    timeout=90,
                 )
             except Exception:  # noqa: BLE001
-                pass
+                print("  [cleanup] WARNING: cleanup shutdown also failed.", flush=True)
 
-        if completed + len(failed) < total:
+        remaining_runs = total - completed - len(failed)
+        if remaining_runs > 0:
             _sleep(INTER_RUN_DELAY_SECS, "inter-run cooldown")
 
     print(f"\n{'='*60}")
-    print(f"  Completed : {completed}/{total}")
+    print(f"  Completed : {completed} / {total}")
     if failed:
         print(f"  Failed    : {len(failed)}")
-        for f in failed:
-            print(f"    - {f}")
+        for name in failed:
+            print(f"    - {name}")
     print(f"{'='*60}")
 
     return 0 if not failed else 1
