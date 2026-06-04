@@ -10,6 +10,7 @@ wandb:
   online: true
   project_name: OPEN_FAIR
   run_name: My_awesomre_FAIR_run
+  group: AWESOME_GROUP
   kafka_broker_url: kafka:9092
   kafka_consumer_group_id: WANDBER
   kafka_auto_offset_reset: earliest
