@@ -133,7 +133,7 @@ EXPERIMENTS: dict[int, dict] = {
         "fl": True,
         "override": "exp_dynamic_noise_phase1",
         "dynamic_noise": True,
-        "description": "FL + mid-run noise injection on angela (noise 0 → 1.0 at 50% duration).",
+        "description": "FL + mid-run noise injection on angela (noise 0 -> 1.0 at 50% duration).",
     },
     4: {
         "name": "dynamic-noise-nofl",
@@ -289,7 +289,11 @@ def _run_one(
     if exp["override"]:
         cli("apply-override", exp["override"])
 
+    # Seed both the MLP initialisation (consumer) and the data-generation
+    # simulator (producer) with the same per-run value so experiments are
+    # reproducible end-to-end.
     cli("set", "default_consumer_config.seed", str(seed))
+    cli("set", "default_vehicle_config.seed", str(seed))
     cli("set", "wandb.run_name", run_name)
     cli("set", "wandb.group", name)
 
@@ -338,8 +342,8 @@ def _run_one(
     # ------------------------------------------------------------------
     # 8. Graceful shutdown.
     #    POST /shutdown in app.py performs a sequential teardown:
-    #      stop_security_manager → stop_fl → stop_consumers →
-    #      stop_producers → stop_attacks → stop_wandb
+    #      stop_security_manager -> stop_fl -> stop_consumers ->
+    #      stop_producers -> stop_attacks -> stop_wandb
     #    It is synchronous and returns only when all steps are done.
     # ------------------------------------------------------------------
     cli("shutdown")
