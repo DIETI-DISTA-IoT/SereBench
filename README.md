@@ -459,3 +459,296 @@ python tests/dash_cli.py --state-file ./my_run.yaml show-config
 | `vehicle-status <vehicle>` | Print running status of a vehicle |
 | `logs <container>` | Print / stream container logs |
 | `wandb-monitor` | Poll W&B and print metric summary |
+
+---
+
+## Automated Multi-Run Experiments (`tests/experiments.py`)
+
+For systematic benchmarking with statistical significance, SereBench ships with
+`tests/experiments.py` — a batch runner that executes all canonical experiments
+automatically, repeating each one with multiple random seeds.
+
+Unlike `dash_cli.py` (which is interactive and issues one command at a time),
+`experiments.py` drives the full lifecycle of every run: it configures the CLI
+state, starts and stops services in the correct order, sleeps for the run
+duration, and shuts down cleanly before moving to the next run.
+
+Vehicle containers are created **once** before the batch starts and are reused
+across all runs. Only the services running inside them (producers, consumers,
+W&B logger, FL aggregator) are cycled per run.
+
+---
+
+### Pre-requisites
+
+```bash
+# 1. Infrastructure must be up
+docker compose up -d
+
+# 2. Python dependencies on the host (same as for dash_cli.py)
+pip install requests pyyaml hydra-core omegaconf
+
+# 3. Create vehicle containers once — do NOT repeat between runs
+python tests/dash_cli.py create-vehicles
+```
+
+---
+
+### Running the canonical experiments
+
+```bash
+# All 6 experiments, 5 seeds each (~30 h at 1 h/run)
+python tests/experiments.py
+
+# A specific subset of experiments
+python tests/experiments.py --experiments 1 2
+
+# Fewer seeds for a quick validation
+python tests/experiments.py --seeds 42 123 --run-duration 600
+
+# Continue past a failed run instead of aborting the whole batch
+python tests/experiments.py --skip-on-error
+
+# Non-default dashboard URL
+python tests/experiments.py --base-url http://192.168.1.10:5000
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--experiments N [N ...]` | all (1–6) | Experiment numbers to run |
+| `--seeds S [S ...]` | `42 123 456 789 1234` | One independent run per seed |
+| `--run-duration SECS` | `3600` | Duration of each run (seconds) |
+| `--base-url URL` | `http://localhost:5000` | Dashboard URL |
+| `--skip-on-error` | off | Log failures and continue instead of aborting |
+
+---
+
+### Startup order within each run
+
+Every run follows this fixed sequence, fully synchronous — the next step only
+begins once the HTTP call for the current step has returned successfully:
+
+```
+1. init-config               reset CLI state to defaults
+2. apply-override <profile>  merge experiment-specific vehicle config (if any)
+3. set seed + wandb.run_name configure per-run parameters
+4. start-wandb               W&B logger first, so no metrics are missed
+                             (timeout: 120 s — W&B can be slow to initialise)
+5. produce-all               start data producers
+   sleep 15 s               let producers warm up
+6. start-automatic-attacks   inject attack-class events into the stream
+   sleep 15 s               let the attack stream stabilise
+7. consume-all               start consumers (they now see a live, mixed stream)
+   sleep 10 s               let consumers initialise
+8. start-federated-learning  FL experiments only
+
+   --- sleep(run_duration) ---
+   (for dynamic-noise experiments: sleep(run_duration/2), inject noise
+    into angela via POST /reset-noise, sleep(run_duration/2))
+
+9. shutdown                  sequential teardown inside the dashboard:
+                             security-manager → FL → consumers →
+                             producers → attacks → wandb
+   sleep 30 s               inter-run cooldown
+```
+
+Vehicle containers are **not** deleted after each run.
+
+---
+
+### Canonical experiment matrix
+
+| # | W&B group | FL | Adversarial training | Config override |
+|---|-----------|----|-----------------------|-----------------|
+| 1 | `noadvtraining-nofl` | No | No | _(none)_ |
+| 2 | `advtraining-nofl` | No | Yes (all vehicles, own noise level) | `exp_advtraining.yaml` |
+| 3 | `dynamic-noise-fl` | Yes | Yes (bob/claude/daniel); angela noise injected mid-run | `exp_dynamic_noise_phase1.yaml` |
+| 4 | `dynamic-noise-nofl` | No | Yes (bob/claude/daniel); angela noise injected mid-run | `exp_dynamic_noise_phase1.yaml` |
+| 5 | `noadvtraining-fl` | Yes | No | _(none)_ |
+| 6 | `advtraining-fl` | Yes | Yes (bob/claude/daniel); angela trains clean | `exp_advtraining_fl.yaml` |
+
+W&B runs are named `{group}_seed{seed}_run{N}` and tagged with `wandb.group`
+so they can be filtered together in the W&B UI.
+
+---
+
+### Editing an existing experiment
+
+Each experiment is defined by a single dict entry in `EXPERIMENTS` at the top
+of `tests/experiments.py`:
+
+```python
+EXPERIMENTS: dict[int, dict] = {
+    1: {
+        "name": "noadvtraining-nofl",   # W&B group name and run-name prefix
+        "fl": False,                     # whether to start federated learning
+        "override": None,                # config/overrides/<name>.yaml, or None
+        "dynamic_noise": False,          # inject noise into angela mid-run?
+        "description": "...",
+    },
+    ...
+}
+```
+
+To change a parameter for an existing experiment — for example to use
+`fedyogi` instead of the default `fedavg` strategy for experiment 5 — you
+have two options:
+
+**Option A — point to a different override file:**
+
+```python
+5: {
+    "name": "noadvtraining-fl-yogi",
+    "fl": True,
+    "override": "fedyogi",   # config/overrides/fedyogi.yaml already exists
+    "dynamic_noise": False,
+    "description": "FL with FedYogi, no adversarial training.",
+},
+```
+
+**Option B — add `set` calls inside `_run_one` for one-off tweaks:**
+
+```python
+# inside _run_one, after apply-override:
+if exp["name"] == "noadvtraining-fl-yogi":
+    cli("set", "federated_learning.aggregation_strategy", "fedyogi")
+```
+
+Option A is cleaner and keeps experiment definitions declarative; option B is
+useful for quick experiments that do not warrant a new override file.
+
+---
+
+### Adding a new experiment
+
+**Step 1 — define the vehicle configuration in a new override file**
+
+Create `config/overrides/my_experiment.yaml`. The file is deep-merged on top of
+`config/default.yaml`, so you only need to list the keys that differ. The
+`vehicles` list **replaces** the default list entirely when merged, so include
+all four vehicles if you override it:
+
+```yaml
+# config/overrides/my_experiment.yaml
+
+# Example: all vehicles train adversarially at their own noise level,
+# but with a faster FL aggregation interval.
+default_vehicle_config:
+  adversarial_training: True
+
+federated_learning:
+  aggregation_interval_secs: 15
+```
+
+Or with per-vehicle noise:
+
+```yaml
+# config/overrides/my_experiment.yaml
+vehicles:
+  - angela:
+      Mp_std: 0.5
+      Bp_std: 0.5
+      adversarial_training: True
+  - bob:
+      Mp_std: 0.5
+      Bp_std: 0.5
+      adversarial_training: True
+  - claude:
+      Mp_std: 0.5
+      Bp_std: 0.5
+      adversarial_training: True
+  - daniel:
+      Mp_std: 0.5
+      Bp_std: 0.5
+      adversarial_training: True
+```
+
+**Step 2 — register the experiment in `tests/experiments.py`**
+
+Add a new entry to the `EXPERIMENTS` dict. Pick an unused integer key:
+
+```python
+7: {
+    "name": "my-experiment",
+    "fl": True,
+    "override": "my_experiment",   # name without .yaml extension
+    "dynamic_noise": False,
+    "description": "Uniform noise=0.5, adversarial training, FL.",
+},
+```
+
+**Step 3 — run it**
+
+```bash
+python tests/experiments.py --experiments 7 --seeds 42 123 456 --run-duration 3600
+```
+
+That's it. The runner picks up the new entry, applies your override file before
+each run, and logs results to W&B under the group name `my-experiment`.
+
+---
+
+### Writing a new experiment script from scratch
+
+If the batch-runner model does not fit your use case (e.g. you need to sweep a
+continuous hyperparameter, interleave runs with post-processing, or integrate
+with an external scheduler), you can write a standalone script that calls
+`dash_cli.py` via `subprocess`. The pattern used in `experiments.py` is
+straightforward to replicate:
+
+```python
+import subprocess, sys, time
+from pathlib import Path
+
+DASH_CLI = Path("tests/dash_cli.py")
+BASE_URL  = "http://localhost:5000"
+
+def cli(*args, timeout=180):
+    """Run one dash_cli.py command synchronously. Raises on failure."""
+    cmd = [sys.executable, str(DASH_CLI),
+           "--base-url", BASE_URL,
+           "--timeout", str(timeout)] + list(args)
+    result = subprocess.run(cmd, text=True, capture_output=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"CLI command failed: {' '.join(args)}")
+
+# ---- configure ----
+cli("init-config")
+cli("apply-override", "my_experiment")       # optional
+cli("set", "default_consumer_config.seed", "42")
+cli("set", "wandb.run_name", "my_run_seed42")
+cli("set", "wandb.group",    "my-experiment")
+
+# ---- start (order matters) ----
+cli("start-wandb", timeout=120)              # W&B first
+cli("produce-all")
+time.sleep(15)
+cli("start-automatic-attacks")
+time.sleep(15)
+cli("consume-all")
+time.sleep(10)
+cli("start-federated-learning")              # omit if no FL
+
+# ---- run ----
+time.sleep(3600)                             # your experiment duration
+
+# ---- stop ----
+cli("shutdown")                              # safe sequential teardown
+```
+
+Key rules to follow:
+
+- Always call `init-config` at the start of each run to reset the state to a
+  known baseline before applying overrides.
+- Call `start-wandb` **before** `produce-all`. The wandber container must be
+  listening before metrics start flowing or the first observations will be lost.
+- Leave 15 s between `produce-all` and `start-automatic-attacks`, and another
+  15 s before `consume-all`. This lets the data stream stabilise before
+  consumers start classifying.
+- Do **not** call `create-vehicles` or `delete-vehicles` inside the run loop.
+  Vehicle containers are expensive to create and their internal state (Kafka
+  offsets, buffer contents) resets on recreation. Create them once before the
+  loop and delete them manually when the full batch is done.
+- `shutdown` is the correct way to end a run. It performs a sequential,
+  ordered teardown inside the dashboard container and returns only when all
+  services have acknowledged the stop command.
