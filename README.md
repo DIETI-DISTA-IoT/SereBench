@@ -164,7 +164,7 @@ The CLI sends HTTP requests to the dashboard container's REST API (exposed on `h
 Install the CLI dependencies on the **host** (outside Docker):
 
 ```bash
-pip install requests pyyaml hydra-core omegaconf
+pip install -r requirements.txt
 ```
 
 `hydra-core` and `omegaconf` are optional — the CLI degrades gracefully without them, but `init-config`, `apply-override`, and the `set` key-validation feature all require them.
