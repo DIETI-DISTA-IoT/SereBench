@@ -1,0 +1,7 @@
+# Experiment 2 — advtraining-nofl
+# All vehicles train adversarially on their own noise level.
+# Vehicle noise gradient is preserved from default.yaml:
+#   angela=0.0, bob=0.7, claude=1.4, daniel=2.1
+
+default_vehicle_config:
+  adversarial_training: True
