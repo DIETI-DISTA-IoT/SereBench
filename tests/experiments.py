@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """SeReBench canonical experiment runner.
 
-Reproduces the 8 experiments described in the SereBench paper with multiple
-independent runs per experiment (one per seed) for statistical significance.
+Reproduces the 6 experiments with multiple independent runs per experiment
+(one per seed) for statistical significance.
 
 Experiment matrix
 -----------------
@@ -11,17 +11,14 @@ Experiment matrix
                            no federated learning.
   2. advtraining-nofl      Adversarial training ON for all vehicles (each trains
                            on its own noise level), no FL.
-  3. noadvtraining-fl      Federated learning only, no adversarial training,
+  3. dynamic-noise-fl      FL; angela starts at noise=0, then noise=1.0 is
+                           injected at ~50% of run duration via POST /reset-noise.
+  4. dynamic-noise-nofl    Same as 3 but without FL.
+  5. noadvtraining-fl      Federated learning only, no adversarial training,
                            default noise gradient.
-  4. advtraining-fl        FL + adversarial training; uniform noise=1.0 across
+  6. advtraining-fl        FL + adversarial training; uniform noise=1.0 across
                            all vehicles; only bob/claude/daniel train adversarially,
                            angela trains clean.
-  5. dynamic-noise-fl      FL; angela starts at noise=0, then noise=1.0 is
-                           injected at ~50% of run duration via POST /reset-noise.
-  6. dynamic-noise-nofl    Same as 5 but without FL.
-  7. noadvtraining-fl-seed Experiment 3 repeated with a fixed shared seed for all
-                           vehicles (faster FL convergence baseline).
-  8. advtraining-fl-seed   Experiment 4 repeated with a fixed shared seed.
 
 Pre-requisites
 --------------
@@ -34,11 +31,11 @@ between runs — it only starts and stops the services running inside them.
 
 Typical usage
 -------------
-  # All 8 experiments, 5 seeds each (~40 h at 1 h/run)
+  # All 6 experiments, 5 seeds each (~30 h at 1 h/run)
   python tests/experiments.py
 
   # Specific experiments only
-  python tests/experiments.py --experiments 1 2 3
+  python tests/experiments.py --experiments 1 2
 
   # Fewer seeds for a quick sanity check
   python tests/experiments.py --seeds 42 123 --run-duration 600
@@ -51,25 +48,25 @@ Typical usage
 
 Startup order (per run)
 -----------------------
-  start-wandb          (synchronous; timeout 120 s — W&B can be slow to connect)
-  produce-all          (synchronous; producers start streaming)
+  start-wandb               (synchronous; timeout 120 s — W&B can be slow)
+  produce-all               (synchronous)
   sleep 15 s
-  start-automatic-attacks  (synchronous)
+  start-automatic-attacks   (synchronous)
   sleep 15 s
-  consume-all          (synchronous; consumers start processing the live stream)
+  consume-all               (synchronous)
   sleep 10 s
-  start-federated-learning  (synchronous; only for FL experiments)
+  start-federated-learning  (synchronous; FL experiments only)
   --- experiment runs for --run-duration seconds ---
-  shutdown             (synchronous, sequential teardown inside the dashboard)
+  shutdown                  (synchronous, sequential teardown in the dashboard)
 
 Vehicle containers are NOT touched between runs.
 
-Dynamic-noise experiments (5 & 6)
+Dynamic-noise experiments (3 & 4)
 ----------------------------------
 At the midpoint of each run the script POSTs to POST /reset-noise on the
 dashboard to switch angela from noise=0 to Mp_std=Bp_std=1.0.  This endpoint
-already exists in the dashboard (app.py).  If the request fails for any reason
-a clear warning is printed and the run continues at the original noise level.
+already exists in the dashboard (app.py).  If the request fails a warning is
+printed and the run continues at the original noise level.
 """
 
 from __future__ import annotations
@@ -100,11 +97,11 @@ DEFAULT_RUN_DURATION_SECS = 3600     # 1 hour per run
 INTER_RUN_DELAY_SECS = 30             # cooldown between successive runs
 
 # Delays within the startup sequence (seconds)
-_DELAY_AFTER_PRODUCE = 15
-_DELAY_AFTER_ATTACKS = 15
+_DELAY_AFTER_PRODUCE  = 15
+_DELAY_AFTER_ATTACKS  = 15
 _DELAY_AFTER_CONSUME  = 10
 
-# Timeout for the start-wandb step specifically — W&B can be slow to initialise
+# Timeout for start-wandb specifically — W&B can be slow to initialise
 _WANDB_TIMEOUT_SECS = 120
 
 
@@ -116,90 +113,53 @@ _WANDB_TIMEOUT_SECS = 120
 #   fl            : whether to start federated learning
 #   override      : config/overrides/<name>.yaml to apply (None = use defaults)
 #   dynamic_noise : whether to inject mid-run noise into angela via /reset-noise
-#   fixed_seed    : if True, use FIXED_SEED for all runs (same-init FL baseline)
 EXPERIMENTS: dict[int, dict] = {
     1: {
         "name": "noadvtraining-nofl",
         "fl": False,
         "override": None,
         "dynamic_noise": False,
-        "fixed_seed": False,
-        "description": (
-            "Baseline: default noise gradient, no adversarial training, no FL."
-        ),
+        "description": "Baseline: default noise gradient, no adversarial training, no FL.",
     },
     2: {
         "name": "advtraining-nofl",
         "fl": False,
         "override": "exp_advtraining",
         "dynamic_noise": False,
-        "fixed_seed": False,
-        "description": (
-            "Adversarial training ON for all vehicles (each trains on own noise), no FL."
-        ),
+        "description": "Adversarial training ON for all vehicles (each trains on own noise), no FL.",
     },
     3: {
+        "name": "dynamic-noise-fl",
+        "fl": True,
+        "override": "exp_dynamic_noise_phase1",
+        "dynamic_noise": True,
+        "description": "FL + mid-run noise injection on angela (noise 0 → 1.0 at 50% duration).",
+    },
+    4: {
+        "name": "dynamic-noise-nofl",
+        "fl": False,
+        "override": "exp_dynamic_noise_phase1",
+        "dynamic_noise": True,
+        "description": "Mid-run noise injection on angela, no FL.",
+    },
+    5: {
         "name": "noadvtraining-fl",
         "fl": True,
         "override": None,
         "dynamic_noise": False,
-        "fixed_seed": False,
-        "description": "Federated learning only, no adversarial training.",
+        "description": "Federated learning only, no adversarial training, default noise gradient.",
     },
-    4: {
+    6: {
         "name": "advtraining-fl",
         "fl": True,
         "override": "exp_advtraining_fl",
         "dynamic_noise": False,
-        "fixed_seed": False,
         "description": (
             "FL + adversarial training; uniform noise=1.0; only bob/claude/daniel "
             "train adversarially, angela trains clean."
         ),
     },
-    5: {
-        "name": "dynamic-noise-fl",
-        "fl": True,
-        "override": "exp_dynamic_noise_phase1",
-        "dynamic_noise": True,
-        "fixed_seed": False,
-        "description": (
-            "FL + mid-run noise injection on angela (noise 0 → 1.0 at 50% duration)."
-        ),
-    },
-    6: {
-        "name": "dynamic-noise-nofl",
-        "fl": False,
-        "override": "exp_dynamic_noise_phase1",
-        "dynamic_noise": True,
-        "fixed_seed": False,
-        "description": "Mid-run noise injection on angela, no FL.",
-    },
-    7: {
-        "name": "noadvtraining-fl-seed",
-        "fl": True,
-        "override": None,
-        "dynamic_noise": False,
-        "fixed_seed": True,
-        "description": (
-            "Experiment 3 with same-seed model initialisation across all vehicles "
-            "(demonstrates faster FL convergence when models share their starting point)."
-        ),
-    },
-    8: {
-        "name": "advtraining-fl-seed",
-        "fl": True,
-        "override": "exp_advtraining_fl",
-        "dynamic_noise": False,
-        "fixed_seed": True,
-        "description": (
-            "Experiment 4 with same-seed model initialisation across all vehicles."
-        ),
-    },
 }
-
-# Seed value used for experiments 7 & 8 (all vehicles share this initialisation)
-FIXED_SEED = 777
 
 
 # ---------------------------------------------------------------------------
@@ -207,14 +167,13 @@ FIXED_SEED = 777
 # ---------------------------------------------------------------------------
 
 def _cli(*args: str, base_url: str, timeout: int = 180) -> None:
-    """Run one dash_cli.py command and wait for it to complete.
+    """Run one dash_cli.py command and block until it completes.
 
     Execution is fully synchronous: this function blocks until the underlying
     HTTP request to the dashboard returns (or the timeout is hit).  The
-    dashboard routes themselves are synchronous — they only return 200 once
-    the requested action has been dispatched (e.g. all producers have
-    acknowledged the start command).  We therefore never issue the next step
-    before the current one has completed.
+    dashboard routes are synchronous — they only return 200 once the
+    requested action has been dispatched.  We therefore never issue the next
+    step before the current one has completed.
 
     Raises RuntimeError if the command exits with a non-zero status code.
     """
@@ -257,13 +216,12 @@ def _sleep(seconds: int, label: str) -> None:
 def _inject_angela_noise(base_url: str, mp_std: float = 1.0, bp_std: float = 1.0) -> None:
     """Switch angela's adversarial noise level at runtime via POST /reset-noise.
 
-    The dashboard already exposes this endpoint (app.py).  The payload format
-    expected by the server is::
+    Payload expected by the dashboard::
 
         {"vehicle_name": "angela", "Mp_std": <float>, "Bp_std": <float>}
 
-    If the call fails for any reason (network error, unexpected status) a
-    warning is printed and the run continues at the original noise level.
+    If the call fails a warning is printed and the run continues at the
+    original noise level.
     """
     url = f"{base_url.rstrip('/')}/reset-noise"
     payload = {"vehicle_name": "angela", "Mp_std": mp_std, "Bp_std": bp_std}
@@ -275,7 +233,7 @@ def _inject_angela_noise(base_url: str, mp_std: float = 1.0, bp_std: float = 1.0
     try:
         resp = requests.post(url, json=payload, timeout=30)
         if resp.ok:
-            print("  [noise] Noise injection succeeded.", flush=True)
+            print("  [noise] Injection succeeded.", flush=True)
         else:
             print(
                 f"  [noise] WARNING: /reset-noise returned HTTP {resp.status_code} — "
@@ -331,44 +289,43 @@ def _run_one(
     if exp["override"]:
         cli("apply-override", exp["override"])
 
-    effective_seed = FIXED_SEED if exp["fixed_seed"] else seed
-    cli("set", "default_consumer_config.seed", str(effective_seed))
+    cli("set", "default_consumer_config.seed", str(seed))
     cli("set", "wandb.run_name", run_name)
     cli("set", "wandb.group", name)
 
     # ------------------------------------------------------------------
-    # 2. Start W&B logger first — so no metrics are missed
+    # 2. Start W&B logger first — so no metrics are missed.
     #    W&B can take a while to initialise; use a dedicated generous timeout.
     # ------------------------------------------------------------------
     cli("start-wandb", timeout=_WANDB_TIMEOUT_SECS)
 
     # ------------------------------------------------------------------
-    # 3. Start producers — data must flow before consumers or FL start
+    # 3. Start producers — data must flow before consumers or FL start.
     # ------------------------------------------------------------------
     cli("produce-all")
     _sleep(_DELAY_AFTER_PRODUCE, "letting producers warm up")
 
     # ------------------------------------------------------------------
     # 4. Start automatic attacks — so attack-class data is present in the
-    #    stream before consumers begin classifying
+    #    stream before consumers begin classifying.
     # ------------------------------------------------------------------
     cli("start-automatic-attacks")
     _sleep(_DELAY_AFTER_ATTACKS, "letting attack stream stabilise")
 
     # ------------------------------------------------------------------
-    # 5. Start consumers — they now find an active, mixed-class data stream
+    # 5. Start consumers — they now find an active, mixed-class data stream.
     # ------------------------------------------------------------------
     cli("consume-all")
     _sleep(_DELAY_AFTER_CONSUME, "letting consumers initialise")
 
     # ------------------------------------------------------------------
-    # 6. Start federated learning (FL experiments only)
+    # 6. Start federated learning (FL experiments only).
     # ------------------------------------------------------------------
     if exp["fl"]:
         cli("start-federated-learning")
 
     # ------------------------------------------------------------------
-    # 7. Run — with optional mid-run noise injection (experiments 5 & 6)
+    # 7. Run — with optional mid-run noise injection (experiments 3 & 4).
     # ------------------------------------------------------------------
     if exp["dynamic_noise"]:
         half = run_duration // 2
@@ -379,11 +336,10 @@ def _run_one(
         _sleep(run_duration, "experiment running")
 
     # ------------------------------------------------------------------
-    # 8. Graceful shutdown
-    #    The /shutdown endpoint in app.py already performs a sequential,
-    #    ordered teardown with sleeps between each step:
-    #      stop_security_manager -> stop_fl -> stop_consumers ->
-    #      stop_producers -> stop_attacks -> stop_wandb
+    # 8. Graceful shutdown.
+    #    POST /shutdown in app.py performs a sequential teardown:
+    #      stop_security_manager → stop_fl → stop_consumers →
+    #      stop_producers → stop_attacks → stop_wandb
     #    It is synchronous and returns only when all steps are done.
     # ------------------------------------------------------------------
     cli("shutdown")
@@ -410,7 +366,7 @@ def main() -> int:
         choices=list(EXPERIMENTS),
         default=list(EXPERIMENTS),
         metavar="N",
-        help="Experiment numbers to run (default: all 8).",
+        help="Experiment numbers to run (default: all 6).",
     )
     parser.add_argument(
         "--seeds",
@@ -480,7 +436,7 @@ def main() -> int:
                     flush=True,
                 )
                 return 1
-            # Best-effort cleanup so the next run starts with a clean state.
+            # Best-effort cleanup so the next run starts from a clean state.
             # We do NOT delete vehicles.
             print("  [cleanup] Attempting best-effort shutdown before next run ...", flush=True)
             try:
