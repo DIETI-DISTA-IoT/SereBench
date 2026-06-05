@@ -342,8 +342,8 @@ def _run_one(
     # ------------------------------------------------------------------
     # 8. Graceful shutdown.
     #    POST /shutdown in app.py performs a sequential teardown:
-    #      stop_security_manager -> stop_fl -> stop_consumers ->
-    #      stop_producers -> stop_attacks -> stop_wandb
+    #      stop_attacks -> stop_fl -> stop_consumers ->
+    #      stop_producers -> stop_wandb
     #    It is synchronous and returns only when all steps are done.
     # ------------------------------------------------------------------
     cli("shutdown")
