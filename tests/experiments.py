@@ -94,12 +94,12 @@ DASH_CLI = REPO_ROOT / "tests" / "dash_cli.py"
 
 DEFAULT_SEEDS = [42, 123, 456, 789, 1234]
 DEFAULT_RUN_DURATION_SECS = 3600     # 1 hour per run
-INTER_RUN_DELAY_SECS = 30             # cooldown between successive runs
+INTER_RUN_DELAY_SECS = 15             # cooldown between successive runs
 
 # Delays within the startup sequence (seconds)
-_DELAY_AFTER_PRODUCE  = 15
-_DELAY_AFTER_ATTACKS  = 15
-_DELAY_AFTER_CONSUME  = 10
+_DELAY_AFTER_PRODUCE  = 5
+_DELAY_AFTER_ATTACKS  = 5
+_DELAY_AFTER_CONSUME  = 5
 
 # Timeout for start-wandb specifically — W&B can be slow to initialise
 _WANDB_TIMEOUT_SECS = 120
