@@ -173,8 +173,8 @@ def load_override_file(config_dir: Path, name_or_path: str) -> tuple[dict[str, A
     """Resolve a profile name or file path to a parsed YAML dict.
 
     Accepts:
-      - a bare name like ``fedyogi``  → config/overrides/fedyogi.yaml
-      - a relative or absolute path   → used as-is
+      - a bare name like ``fedyogi``  -> config/overrides/fedyogi.yaml
+      - a relative or absolute path   -> used as-is
     """
     candidate = Path(name_or_path)
     if candidate.suffix == ".yaml" or candidate.is_absolute() or "/" in name_or_path or "\\\\" in name_or_path:
@@ -511,8 +511,8 @@ def main() -> int:
     sub.add_parser(
         "start-experiment",
         help=(
-            "Run the full experiment sequence: produce-all → consume-all → "
-            "security-manager → FL → wandb → automatic-attacks"
+            "Run the full experiment sequence: produce-all -> consume-all -> "
+            "security-manager -> FL -> wandb -> automatic-attacks"
         ),
     )
     sub.add_parser(
@@ -794,9 +794,7 @@ def main() -> int:
         "health": ("GET", "/health"),
         "create-vehicles": ("POST", "/create-vehicles"),
         "delete-vehicles": ("POST", "/delete-vehicles"),
-        "produce-all": ("POST", "/produce-all"),
         "stop-producing-all": ("POST", "/stop-producing-all"),
-        "consume-all": ("POST", "/consume-all"),
         "stop-consuming-all": ("POST", "/stop-consuming-all"),
         "start-federated-learning": ("POST", "/start-federated-learning"),
         "stop-federated-learning": ("POST", "/stop-federated-learning"),
@@ -825,6 +823,32 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Commands that need a payload built from state
     # ------------------------------------------------------------------
+
+    if args.command == "produce-all":
+        payload = {
+            "default_vehicle_config": state.get("default_vehicle_config", {}),
+            "vehicles": state.get("vehicles", []),
+        }
+        try:
+            result = client.http("POST", "/produce-all", json_payload=payload)
+        except requests.RequestException as exc:
+            print(f"Request failed: {exc}")
+            return 2
+        pretty_print_result(result)
+        return 0 if 200 <= result.status < 300 else 2
+
+    if args.command == "consume-all":
+        payload = {
+            "default_consumer_config": state.get("default_consumer_config", {}),
+            "vehicles": state.get("vehicles", []),
+        }
+        try:
+            result = client.http("POST", "/consume-all", json_payload=payload)
+        except requests.RequestException as exc:
+            print(f"Request failed: {exc}")
+            return 2
+        pretty_print_result(result)
+        return 0 if 200 <= result.status < 300 else 2
 
     if args.command == "start-wandb":
         payload = {"wandb": state.get("wandb", {})}
