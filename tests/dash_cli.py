@@ -851,9 +851,8 @@ def main() -> int:
         return 0 if 200 <= result.status < 300 else 2
 
     if args.command == "start-wandb":
-        payload = {"wandb": state.get("wandb", {})}
         try:
-            result = client.http("POST", "/start-wandb", json_payload=payload)
+            result = client.http("POST", "/start-wandb", json_payload=state)
         except requests.RequestException as exc:
             print(f"Request failed: {exc}")
             return 2
