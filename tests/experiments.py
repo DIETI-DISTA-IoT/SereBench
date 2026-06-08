@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SeReBench canonical experiment runner.
 
-Reproduces the 6 experiments with multiple independent runs per experiment
+Reproduces the 10 experiments with multiple independent runs per experiment
 (one per seed) for statistical significance.
 
 Experiment matrix
@@ -11,14 +11,18 @@ Experiment matrix
                            no federated learning.
   2. advtraining-nofl      Adversarial training ON for all vehicles (each trains
                            on its own noise level), no FL.
-  3. dynamic-noise-fl      FL; angela starts at noise=0, then noise=1.0 is
+  3. noadvtraining-fl      Federated learning (FedAvg) only, no adversarial
+                           training, default noise gradient.
+  4. noadvtraining-fedprox Same as 3 but FL aggregation strategy is FedProx.
+  5. noadvtraining-fedyogi Same as 3 but FL aggregation strategy is FedYogi.
+  6. advtraining-fl        FL (FedAvg) + adversarial training; uniform noise=1.0
+                           across all vehicles; only bob/claude/daniel train
+                           adversarially, angela trains clean.
+  7. advtraining-fedprox   Same as 6 but FL aggregation strategy is FedProx.
+  8. advtraining-fedyogi   Same as 6 but FL aggregation strategy is FedYogi.
+  9. dynamic-noise-fl      FL; angela starts at noise=0, then noise=1.0 is
                            injected at ~50% of run duration via POST /reset-noise.
-  4. dynamic-noise-nofl    Same as 3 but without FL.
-  5. noadvtraining-fl      Federated learning only, no adversarial training,
-                           default noise gradient.
-  6. advtraining-fl        FL + adversarial training; uniform noise=1.0 across
-                           all vehicles; only bob/claude/daniel train adversarially,
-                           angela trains clean.
+ 10. dynamic-noise-nofl    Same as 9 but without FL.
 
 Pre-requisites
 --------------
@@ -31,7 +35,7 @@ between runs — it only starts and stops the services running inside them.
 
 Typical usage
 -------------
-  # All 6 experiments, 5 seeds each (~30 h at 1 h/run)
+  # All 10 experiments, 5 seeds each (~50 h at 1 h/run)
   python tests/experiments.py
 
   # Specific experiments only
@@ -61,7 +65,7 @@ Startup order (per run)
 
 Vehicle containers are NOT touched between runs.
 
-Dynamic-noise experiments (3 & 4)
+Dynamic-noise experiments (9 & 10)
 ----------------------------------
 At the midpoint of each run the script POSTs to POST /reset-noise on the
 dashboard to switch angela from noise=0 to Mp_std=Bp_std=1.0.  This endpoint
@@ -94,7 +98,7 @@ DASH_CLI = REPO_ROOT / "tests" / "dash_cli.py"
 
 DEFAULT_SEEDS = [42, 123, 456, 789, 1234]
 DEFAULT_RUN_DURATION_SECS = 3600     # 1 hour per run
-INTER_RUN_DELAY_SECS = 15             # cooldown between successive runs
+INTER_RUN_DELAY_SECS = 60             # cooldown between successive runs
 
 # Delays within the startup sequence (seconds)
 _DELAY_AFTER_PRODUCE  = 5
@@ -111,7 +115,9 @@ _WANDB_TIMEOUT_SECS = 120
 # Each entry:
 #   name          : W&B group name and run-name prefix
 #   fl            : whether to start federated learning
-#   override      : config/overrides/<name>.yaml to apply (None = use defaults)
+#   override      : config/overrides/<name>.yaml to apply (None = use defaults).
+#                   May also be a list/tuple of profile names, applied in
+#                   sequence (each one deep-merged on top of the previous).
 #   dynamic_noise : whether to inject mid-run noise into angela via /reset-noise
 EXPERIMENTS: dict[int, dict] = {
     1: {
@@ -129,25 +135,34 @@ EXPERIMENTS: dict[int, dict] = {
         "description": "Adversarial training ON for all vehicles (each trains on own noise), no FL.",
     },
     3: {
-        "name": "dynamic-noise-fl",
-        "fl": True,
-        "override": "exp_dynamic_noise_phase1",
-        "dynamic_noise": True,
-        "description": "FL + mid-run noise injection on angela (noise 0 -> 1.0 at 50% duration).",
-    },
-    4: {
-        "name": "dynamic-noise-nofl",
-        "fl": False,
-        "override": "exp_dynamic_noise_phase1",
-        "dynamic_noise": True,
-        "description": "Mid-run noise injection on angela, no FL.",
-    },
-    5: {
         "name": "noadvtraining-fl",
         "fl": True,
         "override": None,
         "dynamic_noise": False,
-        "description": "Federated learning only, no adversarial training, default noise gradient.",
+        "description": (
+            "Federated learning (FedAvg) only, no adversarial training, "
+            "default noise gradient."
+        ),
+    },
+    4: {
+        "name": "noadvtraining-fedprox",
+        "fl": True,
+        "override": "fedprox",
+        "dynamic_noise": False,
+        "description": (
+            "Same as 'noadvtraining-fl' but FL aggregation strategy is FedProx "
+            "(fedprox_mu=0.01)."
+        ),
+    },
+    5: {
+        "name": "noadvtraining-fedyogi",
+        "fl": True,
+        "override": "fedyogi",
+        "dynamic_noise": False,
+        "description": (
+            "Same as 'noadvtraining-fl' but FL aggregation strategy is FedYogi "
+            "(server-side adaptive learning rate)."
+        ),
     },
     6: {
         "name": "advtraining-fl",
@@ -155,9 +170,43 @@ EXPERIMENTS: dict[int, dict] = {
         "override": "exp_advtraining_fl",
         "dynamic_noise": False,
         "description": (
-            "FL + adversarial training; uniform noise=1.0; only bob/claude/daniel "
-            "train adversarially, angela trains clean."
+            "FL (FedAvg) + adversarial training; uniform noise=1.0; only "
+            "bob/claude/daniel train adversarially, angela trains clean."
         ),
+    },
+    7: {
+        "name": "advtraining-fedprox",
+        "fl": True,
+        "override": ("exp_advtraining_fl", "fedprox"),
+        "dynamic_noise": False,
+        "description": (
+            "Same as 'advtraining-fl' but FL aggregation strategy is FedProx "
+            "(fedprox_mu=0.01)."
+        ),
+    },
+    8: {
+        "name": "advtraining-fedyogi",
+        "fl": True,
+        "override": ("exp_advtraining_fl", "fedyogi"),
+        "dynamic_noise": False,
+        "description": (
+            "Same as 'advtraining-fl' but FL aggregation strategy is FedYogi "
+            "(server-side adaptive learning rate)."
+        ),
+    },
+    9: {
+        "name": "dynamic-noise-fl",
+        "fl": True,
+        "override": "exp_dynamic_noise_phase1",
+        "dynamic_noise": True,
+        "description": "FL + mid-run noise injection on angela (noise 0 -> 1.0 at 50% duration).",
+    },
+    10: {
+        "name": "dynamic-noise-nofl",
+        "fl": False,
+        "override": "exp_dynamic_noise_phase1",
+        "dynamic_noise": True,
+        "description": "Mid-run noise injection on angela, no FL.",
     },
 }
 
@@ -286,8 +335,13 @@ def _run_one(
     # ------------------------------------------------------------------
     cli("init-config")
 
-    if exp["override"]:
-        cli("apply-override", exp["override"])
+    overrides = exp["override"]
+    if overrides:
+        if isinstance(overrides, (list, tuple)):
+            for profile in overrides:
+                cli("apply-override", profile)
+        else:
+            cli("apply-override", overrides)
 
     # Seed both the MLP initialisation (consumer) and the data-generation
     # simulator (producer) with the same per-run value so experiments are
@@ -370,7 +424,7 @@ def main() -> int:
         choices=list(EXPERIMENTS),
         default=list(EXPERIMENTS),
         metavar="N",
-        help="Experiment numbers to run (default: all 6).",
+        help="Experiment numbers to run (default: all 10).",
     )
     parser.add_argument(
         "--seeds",

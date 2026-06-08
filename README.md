@@ -497,7 +497,7 @@ python tests/dash_cli.py create-vehicles
 ### Running the canonical experiments
 
 ```bash
-# All 6 experiments, 5 seeds each (~30 h at 1 h/run)
+# All 10 experiments, 5 seeds each (~50 h at 1 h/run)
 python tests/experiments.py
 
 # A specific subset of experiments
@@ -558,14 +558,18 @@ Vehicle containers are **not** deleted after each run.
 
 ### Canonical experiment matrix
 
-| # | W&B group | FL | Adversarial training | Config override |
-|---|-----------|----|-----------------------|-----------------|
-| 1 | `noadvtraining-nofl` | No | No | _(none)_ |
-| 2 | `advtraining-nofl` | No | Yes (all vehicles, own noise level) | `exp_advtraining.yaml` |
-| 3 | `dynamic-noise-fl` | Yes | Yes (bob/claude/daniel); angela noise injected mid-run | `exp_dynamic_noise_phase1.yaml` |
-| 4 | `dynamic-noise-nofl` | No | Yes (bob/claude/daniel); angela noise injected mid-run | `exp_dynamic_noise_phase1.yaml` |
-| 5 | `noadvtraining-fl` | Yes | No | _(none)_ |
-| 6 | `advtraining-fl` | Yes | Yes (bob/claude/daniel); angela trains clean | `exp_advtraining_fl.yaml` |
+| # | W&B group | FL | FL strategy | Adversarial training | Config override |
+|---|-----------|----|-------------|-----------------------|-----------------|
+| 1 | `noadvtraining-nofl` | No | — | No | _(none)_ |
+| 2 | `advtraining-nofl` | No | — | Yes (all vehicles, own noise level) | `exp_advtraining.yaml` |
+| 3 | `noadvtraining-fl` | Yes | FedAvg | No | _(none)_ |
+| 4 | `noadvtraining-fedprox` | Yes | FedProx | No | `fedprox.yaml` |
+| 5 | `noadvtraining-fedyogi` | Yes | FedYogi | No | `fedyogi.yaml` |
+| 6 | `advtraining-fl` | Yes | FedAvg | Yes (bob/claude/daniel); angela trains clean | `exp_advtraining_fl.yaml` |
+| 7 | `advtraining-fedprox` | Yes | FedProx | Yes (bob/claude/daniel); angela trains clean | `exp_advtraining_fl.yaml` + `fedprox.yaml` |
+| 8 | `advtraining-fedyogi` | Yes | FedYogi | Yes (bob/claude/daniel); angela trains clean | `exp_advtraining_fl.yaml` + `fedyogi.yaml` |
+| 9 | `dynamic-noise-fl` | Yes | FedAvg | Yes (bob/claude/daniel); angela noise injected mid-run | `exp_dynamic_noise_phase1.yaml` |
+| 10 | `dynamic-noise-nofl` | No | — | Yes (bob/claude/daniel); angela noise injected mid-run | `exp_dynamic_noise_phase1.yaml` |
 
 W&B runs are named `{group}_seed{seed}_run{N}` and tagged with `wandb.group`
 so they can be filtered together in the W&B UI.
@@ -591,18 +595,34 @@ EXPERIMENTS: dict[int, dict] = {
 ```
 
 To change a parameter for an existing experiment — for example to use
-`fedyogi` instead of the default `fedavg` strategy for experiment 5 — you
+`fedmedian` instead of `fedavg` for experiment 3 (`noadvtraining-fl`) — you
 have two options:
 
-**Option A — point to a different override file:**
+**Option A — point to a different override file (or a list of override files,
+applied in sequence and deep-merged on top of each other):**
 
 ```python
-5: {
-    "name": "noadvtraining-fl-yogi",
+3: {
+    "name": "noadvtraining-fedmedian",
     "fl": True,
-    "override": "fedyogi",   # config/overrides/fedyogi.yaml already exists
+    "override": "fedmedian",   # config/overrides/fedmedian.yaml already exists
     "dynamic_noise": False,
-    "description": "FL with FedYogi, no adversarial training.",
+    "description": "FL with FedMedian, no adversarial training.",
+},
+```
+
+`override` can also be a tuple/list of profile names — each one is applied
+with `apply-override` in order, deep-merging on top of the previous state.
+This is how experiments 7 and 8 combine the `exp_advtraining_fl` vehicle
+configuration with the `fedprox`/`fedyogi` aggregation-strategy overrides:
+
+```python
+7: {
+    "name": "advtraining-fedprox",
+    "fl": True,
+    "override": ("exp_advtraining_fl", "fedprox"),
+    "dynamic_noise": False,
+    "description": "...",
 },
 ```
 
@@ -610,8 +630,8 @@ have two options:
 
 ```python
 # inside _run_one, after apply-override:
-if exp["name"] == "noadvtraining-fl-yogi":
-    cli("set", "federated_learning.aggregation_strategy", "fedyogi")
+if exp["name"] == "noadvtraining-fedmedian":
+    cli("set", "federated_learning.aggregation_strategy", "fedmedian")
 ```
 
 Option A is cleaner and keeps experiment definitions declarative; option B is
