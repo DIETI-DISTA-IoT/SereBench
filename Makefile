@@ -1,17 +1,17 @@
 # Makefile
 
-.PHONY: all build-dashboard build-consumer build-producer build-wandber \
+.PHONY: all build-dashboard build-consumer build-producer build-wandber build-flmanager \
         all-scache all-scache-nolib \
-        build-dashboard-scache build-consumer-scache build-producer-scache build-wandber-scache \
-        build-dashboard-scache-nolib build-consumer-scache-nolib build-producer-scache-nolib build-wandber-scache-nolib
+        build-dashboard-scache build-consumer-scache build-producer-scache build-wandber-scache build-flmanager-scache \
+        build-dashboard-scache-nolib build-consumer-scache-nolib build-producer-scache-nolib build-wandber-scache-nolib build-flmanager-scache-nolib
 
-all: build-dashboard build-consumer build-producer build-wandber
+all: build-dashboard build-consumer build-producer build-wandber build-flmanager
 
 # Full rebuild with fresh code + fresh pip install
-all-scache: build-dashboard-scache build-producer-scache build-consumer-scache build-wandber-scache
+all-scache: build-dashboard-scache build-producer-scache build-consumer-scache build-wandber-scache build-flmanager-scache
 
 # Fresh code pull only — pip install layers stay cached (faster when requirements.txt is unchanged)
-all-scache-nolib: build-dashboard-scache-nolib build-producer-scache-nolib build-consumer-scache-nolib build-wandber-scache-nolib
+all-scache-nolib: build-dashboard-scache-nolib build-producer-scache-nolib build-consumer-scache-nolib build-wandber-scache-nolib build-flmanager-scache-nolib
 
 build-producer:
 	docker build -t open_fair-producer -f producer/Dockerfile .
@@ -24,6 +24,9 @@ build-dashboard:
 
 build-wandber:
 	docker build -t open_fair-wandber -f wandber/Dockerfile .
+
+build-flmanager:
+	docker build -t open_fair-flmanager -f flmanager/Dockerfile .
 
 # scache: busts pip install AND code clone (use when requirements.txt may have changed)
 build-producer-scache:
@@ -38,6 +41,9 @@ build-dashboard-scache:
 build-wandber-scache:
 	docker build --build-arg CACHE_BUST=$(shell date +%s) -t open_fair-wandber -f wandber/Dockerfile .
 
+build-flmanager-scache:
+	docker build --build-arg CACHE_BUST=$(shell date +%s) -t open_fair-flmanager -f flmanager/Dockerfile .
+
 # scache-nolib: busts only the git clones, reuses cached pip layers (use when only code changed)
 build-producer-scache-nolib:
 	docker build --build-arg CODE_BUST=$(shell date +%s) -t open_fair-producer -f producer/Dockerfile .
@@ -50,3 +56,6 @@ build-dashboard-scache-nolib:
 
 build-wandber-scache-nolib:
 	docker build --build-arg CODE_BUST=$(shell date +%s) -t open_fair-wandber -f wandber/Dockerfile .
+
+build-flmanager-scache-nolib:
+	docker build --build-arg CODE_BUST=$(shell date +%s) -t open_fair-flmanager -f flmanager/Dockerfile .
