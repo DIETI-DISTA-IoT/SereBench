@@ -13,3 +13,6 @@
 [submodule "OpenFAIR"]
 	path = OpenFAIR
 	url = https://github.com/DIETI-DISTA-IoT/of-core
+[submodule "flmanager"]
+	path = flmanager
+	url = https://github.com/DIETI-DISTA-IoT/of-fedlearningmanager.git
