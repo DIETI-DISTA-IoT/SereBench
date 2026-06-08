@@ -77,6 +77,22 @@ services:
     restart: unless-stopped
     # command: ["tail", "-f", "/dev/null"] # decomment this line if you want to start the container without running any command
 
+  fedlearningmanager:
+    image: open_fair-flmanager:latest
+    container_name: fedlearningmanager  # Container name for easier identification — discovered by the dashboard via name matching
+    hostname: fedlearningmanager  # Hostname for internal communication
+    environment:
+      no_proxy: ${HOST_IP}  # Allows the container to access the host machine in case the host has a proxy.
+      HOST_IP: ${HOST_IP}  #  Replace with your host IP address in the .env file
+      BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy  # Wait for kafka to be healthy
+    networks:
+      - trains_network  # Connect the producer to the custom Docker network
+    restart: unless-stopped
+    # command: ["tail", "-f", "/dev/null"] # decomment this line if you want to start the container without running any command
+
   dashboard:
     image: open_fair-dashboard:latest
     container_name: dashboard
