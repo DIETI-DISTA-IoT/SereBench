@@ -146,6 +146,15 @@ default_consumer_config:
   seed: 777
   # Only takes effect when aggregation_strategy is fedprox. (Setting to 0.0 recovers FedAvg behaviour).
   fedprox_mu: 0.01
+  # HopSkipJump decision-based adversarial evaluation (Chen et al., 2020).
+  # Runs in a background thread every save_model_freq_epochs epochs alongside
+  # the existing Gaussian-noise eval. Results are logged to W&B under
+  # {vehicle}_statistics/hsja_adv_eval/* and {vehicle}_hsja_manifold_plot.
+  # Set hsja_enabled: false to disable entirely (e.g. for lightweight runs).
+  hsja_enabled: true
+  hsja_n_per_class: 10      # samples per class attacked per evaluation round
+  hsja_n_steps: 30          # boundary-walk iterations per sample
+  hsja_n_grad_samples: 30   # random directions used for gradient estimation
 
 anomaly_detection:
   output_dim: 3
