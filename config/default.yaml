@@ -139,6 +139,14 @@ default_consumer_config:
   training_freq_seconds: 0.15
   epoch_size: 20
   save_model_freq_epochs: 5
+  # How often (in epochs) to run the adversarial benchmarks (Gaussian-noise eval
+  # + HSJA). Defaults to save_model_freq_epochs but can be set independently to
+  # run benchmarks more often without saving the model as frequently.
+  run_benchmarks_freq_epochs: ${default_consumer_config.save_model_freq_epochs}
+  # Every Nth benchmark run (counted by run_benchmarks_freq_epochs triggers),
+  # also send scatter plots / manifold projections / confusion matrices to W&B.
+  # Scalar metrics are still sent to W&B on every benchmark run.
+  plot_creation_freq_benchmarks: 3
   cpu_period: ${default_vehicle_config.cpu_period}
   cpu_quota: ${default_vehicle_config.cpu_quota}
   cpu_cores: ${default_vehicle_config.cpu_cores}
@@ -147,7 +155,7 @@ default_consumer_config:
   # Only takes effect when aggregation_strategy is fedprox. (Setting to 0.0 recovers FedAvg behaviour).
   fedprox_mu: 0.01
   # HopSkipJump decision-based adversarial evaluation (Chen et al., 2020).
-  # Runs in a background thread every save_model_freq_epochs epochs alongside
+  # Runs in a background thread every run_benchmarks_freq_epochs epochs alongside
   # the existing Gaussian-noise eval. Results are logged to W&B under
   # {vehicle}_statistics/hsja_adv_eval/* and {vehicle}_hsja_manifold_plot.
   # Set hsja_enabled: false to disable entirely (e.g. for lightweight runs).
