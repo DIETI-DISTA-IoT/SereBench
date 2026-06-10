@@ -1,0 +1,5 @@
+# Switch the local anomaly detector architecture from MLP to a 1D-CNN.
+# The CNN shares the same 2D manifold bottleneck before the output layer,
+# so manifold plots, HSJA evaluation and FL aggregation are unaffected.
+anomaly_detection:
+  model_type: cnn
