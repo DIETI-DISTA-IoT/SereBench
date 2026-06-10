@@ -103,7 +103,7 @@ DASH_CLI = REPO_ROOT / "tests" / "dash_cli.py"
 # ---------------------------------------------------------------------------
 
 DEFAULT_SEEDS = [42, 123, 456, 789, 1234]
-DEFAULT_RUN_DURATION_SECS = 3600     # 1 hour per run
+DEFAULT_RUN_DURATION_SECS = 10 * 60   # 10 mins per run
 INTER_RUN_DELAY_SECS = 60             # cooldown between successive runs
 
 # Delays within the startup sequence (seconds)
