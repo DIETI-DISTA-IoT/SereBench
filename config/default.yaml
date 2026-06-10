@@ -138,15 +138,14 @@ default_consumer_config:
   weights_pull_freq_seconds: 60
   training_freq_seconds: 0.15
   epoch_size: 20
-  save_model_freq_epochs: 5
+  save_model_freq_epochs: 20
   # How often (in epochs) to run the adversarial benchmarks (Gaussian-noise eval
-  # + HSJA). Defaults to save_model_freq_epochs but can be set independently to
-  # run benchmarks more often without saving the model as frequently.
-  run_benchmarks_freq_epochs: ${default_consumer_config.save_model_freq_epochs}
+  # + HSJA). 
+  run_benchmarks_freq_epochs: 5
   # Every Nth benchmark run (counted by run_benchmarks_freq_epochs triggers),
   # also send scatter plots / manifold projections / confusion matrices to W&B.
   # Scalar metrics are still sent to W&B on every benchmark run.
-  plot_creation_freq_benchmarks: 3
+  plot_creation_freq_benchmarks: 5
   cpu_period: ${default_vehicle_config.cpu_period}
   cpu_quota: ${default_vehicle_config.cpu_quota}
   cpu_cores: ${default_vehicle_config.cpu_cores}
