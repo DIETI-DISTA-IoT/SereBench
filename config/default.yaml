@@ -158,8 +158,10 @@ default_consumer_config:
 
 anomaly_detection:
   output_dim: 3
-  # Classifier architecture: mlp (default) or cnn (1D-CNN over the feature vector).
-  # Both architectures share the same 2D manifold layer immediately before the
+  # Classifier architecture: mlp (default), cnn (1D-CNN over the feature vector),
+  # or resnet (tabular ResNet, Gorishniy et al. 2021 - a stack of pre-activation
+  # residual MLP blocks, a strong cheap baseline for tabular data).
+  # All architectures share the same 2D manifold layer immediately before the
   # output head, so HSJA / manifold plots / FL aggregation work unchanged.
   model_type: mlp
   h_dim: 128

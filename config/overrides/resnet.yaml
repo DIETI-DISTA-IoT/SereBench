@@ -1,0 +1,7 @@
+# Switch the local anomaly detector architecture to a tabular ResNet
+# (Gorishniy et al. 2021, "Revisiting Deep Learning Models for Tabular Data"):
+# a stack of pre-activation residual MLP blocks. It shares the same 2D
+# manifold bottleneck before the output layer, so manifold plots, HSJA
+# evaluation and FL aggregation are unaffected.
+anomaly_detection:
+  model_type: resnet
