@@ -70,7 +70,7 @@ default_vehicle_config:
   # The rate of information (i.e., time) is divided by a factor of 100 wrt real time for the sake of speeding up the simulation
   mu_anomalies: 0.157
   mu_normal: 0.117
-  alpha: 0.2
+  alpha: 0.05
   beta: 1.9
   anomaly_classes: all
   diagnostics_classes: all
@@ -136,7 +136,7 @@ default_consumer_config:
   diagnostics_classes: all
   weights_push_freq_seconds: 40
   weights_pull_freq_seconds: 60
-  training_freq_seconds: 0.15
+  training_freq_seconds: 0.01
   epoch_size: 20
   save_model_freq_epochs: 20
   # How often (in epochs) to run the adversarial benchmarks (Gaussian-noise eval
@@ -205,5 +205,5 @@ attack:
     - bob
     - claude
     - daniel
-  automatic_attack_interval_secs: 8
+  automatic_attack_interval_secs: 1
   bot_port: 5002
