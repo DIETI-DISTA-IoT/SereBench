@@ -6,4 +6,5 @@ data
 **/__pycache__
 **/of-venv
 **/.idea
-**/venv
+**/venv_serebench_history_cache.pkl
+.ipynb_checkpoints/
