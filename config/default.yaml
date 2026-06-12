@@ -205,5 +205,5 @@ attack:
     - bob
     - claude
     - daniel
-  automatic_attack_interval_secs: 1
+  automatic_attack_interval_secs: 0.3
   bot_port: 5002
