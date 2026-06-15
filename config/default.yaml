@@ -162,6 +162,11 @@ default_consumer_config:
   hsja_n_per_class: 10      # samples per class attacked per evaluation round
   hsja_n_steps: 30          # boundary-walk iterations per sample
   hsja_n_grad_samples: 30   # random directions used for gradient estimation
+  # Feature indices the attack is allowed to perturb (null = whole 40-dim
+  # vector, the original/default behaviour). Set to [32, 33] to restrict
+  # HSJA to usBpPres/usMpPres, matching the Gaussian adv_eval threat model
+  # (Mp_std/Bp_std).
+  hsja_feature_indices: null
 
 anomaly_detection:
   output_dim: 3
