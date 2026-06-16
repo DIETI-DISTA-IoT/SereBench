@@ -7,28 +7,10 @@ default MLP to the 1D-CNN architecture (config/overrides/cnn.yaml). W&B group
 and run names get a `-cnn` suffix so results land alongside, but distinct
 from, the MLP runs of experiments.py.
 
-Reproduces the 10 experiments with multiple independent runs per experiment
-(one per seed) for statistical significance.
-
-Experiment matrix
------------------
-  1. noadvtraining-nofl    Baseline: default noise gradient (angela=0, bob=0.7,
-                           claude=1.4, daniel=2.1), no adversarial training,
-                           no federated learning.
-  2. advtraining-nofl      Adversarial training ON for all vehicles (each trains
-                           on its own noise level), no FL.
-  3. noadvtraining-fl      Federated learning (FedAvg) only, no adversarial
-                           training, default noise gradient.
-  4. noadvtraining-fedprox Same as 3 but FL aggregation strategy is FedProx.
-  5. noadvtraining-fedyogi Same as 3 but FL aggregation strategy is FedYogi.
-  6. advtraining-fl        FL (FedAvg) + adversarial training; uniform noise=1.0
-                           across all vehicles; only bob/claude/daniel train
-                           adversarially, angela trains clean.
-  7. advtraining-fedprox   Same as 6 but FL aggregation strategy is FedProx.
-  8. advtraining-fedyogi   Same as 6 but FL aggregation strategy is FedYogi.
-  9. dynamic-noise-fl      FL; angela starts at noise=0, then noise=1.0 is
-                           injected at ~50% of run duration via POST /reset-noise.
- 10. dynamic-noise-nofl    Same as 9 but without FL.
+Reproduces the redesigned campaign with multiple independent runs per
+experiment (one per seed) for statistical significance. The experiment matrix
+is imported from experiments.py (see that file's docstring for Block A / Block
+B definitions) so all architecture runners stay in lockstep.
 
 Pre-requisites
 --------------
@@ -125,96 +107,9 @@ _WANDB_TIMEOUT_SECS = 120
 #                   May also be a list/tuple of profile names, applied in
 #                   sequence (each one deep-merged on top of the previous).
 #   dynamic_noise : whether to inject mid-run noise into angela via /reset-noise
-EXPERIMENTS: dict[int, dict] = {
-    1: {
-        "name": "noadvtraining-nofl",
-        "fl": False,
-        "override": None,
-        "dynamic_noise": False,
-        "description": "Baseline: default noise gradient, no adversarial training, no FL.",
-    },
-    2: {
-        "name": "advtraining-nofl",
-        "fl": False,
-        "override": "exp_advtraining",
-        "dynamic_noise": False,
-        "description": "Adversarial training ON for all vehicles (each trains on own noise), no FL.",
-    },
-    3: {
-        "name": "noadvtraining-fl",
-        "fl": True,
-        "override": None,
-        "dynamic_noise": False,
-        "description": (
-            "Federated learning (FedAvg) only, no adversarial training, "
-            "default noise gradient."
-        ),
-    },
-    4: {
-        "name": "noadvtraining-fedprox",
-        "fl": True,
-        "override": "fedprox",
-        "dynamic_noise": False,
-        "description": (
-            "Same as 'noadvtraining-fl' but FL aggregation strategy is FedProx "
-            "(fedprox_mu=0.01)."
-        ),
-    },
-    5: {
-        "name": "noadvtraining-fedyogi",
-        "fl": True,
-        "override": "fedyogi",
-        "dynamic_noise": False,
-        "description": (
-            "Same as 'noadvtraining-fl' but FL aggregation strategy is FedYogi "
-            "(server-side adaptive learning rate)."
-        ),
-    },
-    6: {
-        "name": "advtraining-fl",
-        "fl": True,
-        "override": "exp_advtraining_fl",
-        "dynamic_noise": False,
-        "description": (
-            "FL (FedAvg) + adversarial training; uniform noise=1.0; only "
-            "bob/claude/daniel train adversarially, angela trains clean."
-        ),
-    },
-    7: {
-        "name": "advtraining-fedprox",
-        "fl": True,
-        "override": ("exp_advtraining_fl", "fedprox"),
-        "dynamic_noise": False,
-        "description": (
-            "Same as 'advtraining-fl' but FL aggregation strategy is FedProx "
-            "(fedprox_mu=0.01)."
-        ),
-    },
-    8: {
-        "name": "advtraining-fedyogi",
-        "fl": True,
-        "override": ("exp_advtraining_fl", "fedyogi"),
-        "dynamic_noise": False,
-        "description": (
-            "Same as 'advtraining-fl' but FL aggregation strategy is FedYogi "
-            "(server-side adaptive learning rate)."
-        ),
-    },
-    9: {
-        "name": "dynamic-noise-fl",
-        "fl": True,
-        "override": "exp_dynamic_noise_phase1",
-        "dynamic_noise": True,
-        "description": "FL + mid-run noise injection on angela (noise 0 -> 1.0 at 50% duration).",
-    },
-    10: {
-        "name": "dynamic-noise-nofl",
-        "fl": False,
-        "override": "exp_dynamic_noise_phase1",
-        "dynamic_noise": True,
-        "description": "Mid-run noise injection on angela, no FL.",
-    },
-}
+# The experiment matrix is defined once in experiments.py (the canonical mlp
+# runner) and imported here so every architecture runner stays in lockstep.
+from experiments import EXPERIMENTS  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

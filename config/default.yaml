@@ -99,6 +99,12 @@ default_vehicle_config:
   # standard dev for adversarial attacks:
   Mp_std: 0
   Bp_std: 0
+  # Noise std of the producer's adversarial EVAL stream ({vehicle}_eval_*),
+  # which feeds the consumer's adversarial-training buffers. Decoupled from the
+  # live-stream Mp_std/Bp_std so the adversarial-training augmentation level can
+  # be set independently. null -> fall back to Mp_std/Bp_std (legacy behaviour).
+  eval_Mp_std: null
+  eval_Bp_std: null
   adversarial_training: False
   # Seed for the Train simulator RNG. Controls the data-generation sequence
   # so that experiments are reproducible across runs with the same seed.
@@ -162,6 +168,16 @@ default_consumer_config:
   hsja_n_per_class: 10      # samples per class attacked per evaluation round
   hsja_n_steps: 30          # boundary-walk iterations per sample
   hsja_n_grad_samples: 30   # random directions used for gradient estimation
+  # When true, HSJA attacks CLEAN anchor samples (identical threat model for
+  # every vehicle), so avg_perturbation/avg_queries measure the model boundary
+  # rather than each vehicle's producer eval-stream noise. Set false for the
+  # legacy behaviour of attacking the noisy eval stream.
+  hsja_clean_anchors: true
+  # Fixed Gaussian-noise std grid for the decoupled robustness eval
+  # (sigma_grid_evaluation). Applied to the usBpPres/usMpPres features of clean
+  # anomaly/attack samples, identical across the whole fleet. Set to [] to
+  # disable the sigma-grid eval entirely.
+  eval_sigmas: [0.5, 1.0, 1.5, 2.0]
   # Feature indices the attack is allowed to perturb (null = whole 40-dim
   # vector, the original/default behaviour). Set to [32, 33] to restrict
   # HSJA to usBpPres/usMpPres, matching the Gaussian adv_eval threat model

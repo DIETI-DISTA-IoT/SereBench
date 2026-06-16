@@ -1,28 +1,36 @@
 #!/usr/bin/env python3
 """SeReBench canonical experiment runner.
 
-Reproduces the 10 experiments with multiple independent runs per experiment
-(one per seed) for statistical significance.
+Reproduces the redesigned campaign (Block A: ET1/ET2; Block B: ET3) with
+multiple independent runs per experiment (one per seed) for statistical
+significance.
 
-Experiment matrix
------------------
-  1. noadvtraining-nofl    Baseline: default noise gradient (angela=0, bob=0.7,
-                           claude=1.4, daniel=2.1), no adversarial training,
-                           no federated learning.
-  2. advtraining-nofl      Adversarial training ON for all vehicles (each trains
-                           on its own noise level), no FL.
-  3. noadvtraining-fl      Federated learning (FedAvg) only, no adversarial
-                           training, default noise gradient.
-  4. noadvtraining-fedprox Same as 3 but FL aggregation strategy is FedProx.
-  5. noadvtraining-fedyogi Same as 3 but FL aggregation strategy is FedYogi.
-  6. advtraining-fl        FL (FedAvg) + adversarial training; uniform noise=1.0
-                           across all vehicles; only bob/claude/daniel train
-                           adversarially, angela trains clean.
-  7. advtraining-fedprox   Same as 6 but FL aggregation strategy is FedProx.
-  8. advtraining-fedyogi   Same as 6 but FL aggregation strategy is FedYogi.
-  9. dynamic-noise-fl      FL; angela starts at noise=0, then noise=1.0 is
-                           injected at ~50% of run duration via POST /reset-noise.
- 10. dynamic-noise-nofl    Same as 9 but without FL.
+Experiment matrix (redesigned campaign)
+---------------------------------------
+All experiments share an IDENTICAL, training-decoupled evaluation target:
+HSJA on clean anchors (primary) plus a fixed Gaussian sigma-grid
+(sigma_grid_evaluation, secondary). The eval no longer rides on each vehicle's
+Mp_std/Bp_std, so cross-condition comparisons are unconfounded.
+
+  Block A — ET1/ET2 (does adversarial training improve robustness?), no FL:
+    1. et2-noadv-nofl       Baseline: default noise gradient, adversarial
+                            training OFF, no FL (all models train clean).
+    2. et2-adv-nofl         Adversarial training ON, default noise gradient
+                            (bob/claude/daniel augment at 0.7/1.4/2.1), no FL.
+
+  Block B — ET3 (does FL transfer robustness to a clean free-rider?):
+    Common training-augmentation noise (1.0) for bob/claude/daniel; angela is
+    the free-rider (adversarial_training=False, trains clean). The ONLY thing
+    that differs across the block is FL on/off and the aggregation strategy.
+    3. et3-freerider-nofl   Free-rider config, no FL (transfer baseline).
+    4. et3-freerider-fedavg Free-rider + FL (FedAvg).
+    5. et3-freerider-fedprox  Same as 4 but FedProx (fedprox_mu=0.01).
+    6. et3-freerider-fedyogi  Same as 4 but FedYogi.
+    7. et3-freerider-fedmedian Same as 4 but FedMedian.
+
+Run each across the three architectures via experiments.py (mlp),
+experiments_cnn.py (cnn) and experiments_resnet.py (resnet). Dynamic-noise
+experiments were dropped from the paper and are no longer part of the matrix.
 
 Pre-requisites
 --------------
@@ -35,7 +43,7 @@ between runs — it only starts and stops the services running inside them.
 
 Typical usage
 -------------
-  # All 10 experiments, 5 seeds each (~50 h at 1 h/run)
+  # All 7 experiments, 5 seeds each (~35 h at 1 h/run)
   python tests/experiments.py
 
   # Specific experiments only
@@ -65,12 +73,12 @@ Startup order (per run)
 
 Vehicle containers are NOT touched between runs.
 
-Dynamic-noise experiments (9 & 10)
-----------------------------------
-At the midpoint of each run the script POSTs to POST /reset-noise on the
-dashboard to switch angela from noise=0 to Mp_std=Bp_std=1.0.  This endpoint
-already exists in the dashboard (app.py).  If the request fails a warning is
-printed and the run continues at the original noise level.
+Dynamic-noise injection (legacy, unused by the current matrix)
+--------------------------------------------------------------
+The mid-run /reset-noise injection helper is retained for ad-hoc use but no
+experiment in the current matrix sets dynamic_noise=True. If re-enabled, at the
+midpoint of the run the script POSTs to /reset-noise on the dashboard to switch
+angela's noise level; on failure a warning is printed and the run continues.
 """
 
 from __future__ import annotations
@@ -120,93 +128,61 @@ _WANDB_TIMEOUT_SECS = 120
 #                   sequence (each one deep-merged on top of the previous).
 #   dynamic_noise : whether to inject mid-run noise into angela via /reset-noise
 EXPERIMENTS: dict[int, dict] = {
+    # ---- Block A — ET1/ET2 (adversarial-training effect, no FL) ----
     1: {
-        "name": "noadvtraining-nofl",
+        "name": "et2-noadv-nofl",
         "fl": False,
         "override": None,
         "dynamic_noise": False,
         "description": "Baseline: default noise gradient, no adversarial training, no FL.",
     },
     2: {
-        "name": "advtraining-nofl",
+        "name": "et2-adv-nofl",
         "fl": False,
         "override": "exp_advtraining",
         "dynamic_noise": False,
-        "description": "Adversarial training ON for all vehicles (each trains on own noise), no FL.",
+        "description": "Adversarial training ON (default gradient augmentation), no FL.",
     },
+    # ---- Block B — ET3 (FL robustness transfer, clean free-rider) ----
+    # Identical decoupled eval for all vehicles; only FL on/off + aggregation
+    # strategy vary across the block.
     3: {
-        "name": "noadvtraining-fl",
-        "fl": True,
-        "override": None,
+        "name": "et3-freerider-nofl",
+        "fl": False,
+        "override": "exp_et3_freerider",
         "dynamic_noise": False,
         "description": (
-            "Federated learning (FedAvg) only, no adversarial training, "
-            "default noise gradient."
+            "Free-rider transfer baseline: bob/claude/daniel train adversarially "
+            "at common noise=1.0, angela trains clean. No FL."
         ),
     },
     4: {
-        "name": "noadvtraining-fedprox",
+        "name": "et3-freerider-fedavg",
         "fl": True,
-        "override": "fedprox",
+        "override": "exp_et3_freerider",
         "dynamic_noise": False,
-        "description": (
-            "Same as 'noadvtraining-fl' but FL aggregation strategy is FedProx "
-            "(fedprox_mu=0.01)."
-        ),
+        "description": "Free-rider + FL (FedAvg). Robustness transfer to angela via aggregation.",
     },
     5: {
-        "name": "noadvtraining-fedyogi",
+        "name": "et3-freerider-fedprox",
         "fl": True,
-        "override": "fedyogi",
+        "override": ("exp_et3_freerider", "fedprox"),
         "dynamic_noise": False,
-        "description": (
-            "Same as 'noadvtraining-fl' but FL aggregation strategy is FedYogi "
-            "(server-side adaptive learning rate)."
-        ),
+        "description": "Same as et3-freerider-fedavg but FedProx (fedprox_mu=0.01).",
     },
     6: {
-        "name": "advtraining-fl",
+        "name": "et3-freerider-fedyogi",
         "fl": True,
-        "override": "exp_advtraining_fl",
+        "override": ("exp_et3_freerider", "fedyogi"),
         "dynamic_noise": False,
-        "description": (
-            "FL (FedAvg) + adversarial training; uniform noise=1.0; only "
-            "bob/claude/daniel train adversarially, angela trains clean."
-        ),
+        "description": "Same as et3-freerider-fedavg but FedYogi (server-side adaptive LR).",
     },
     7: {
-        "name": "advtraining-fedprox",
+        "name": "et3-freerider-fedmedian",
         "fl": True,
-        "override": ("exp_advtraining_fl", "fedprox"),
+        "override": ("exp_et3_freerider", "fedmedian"),
         "dynamic_noise": False,
-        "description": (
-            "Same as 'advtraining-fl' but FL aggregation strategy is FedProx "
-            "(fedprox_mu=0.01)."
-        ),
-    },
-    8: {
-        "name": "advtraining-fedyogi",
-        "fl": True,
-        "override": ("exp_advtraining_fl", "fedyogi"),
-        "dynamic_noise": False,
-        "description": (
-            "Same as 'advtraining-fl' but FL aggregation strategy is FedYogi "
-            "(server-side adaptive learning rate)."
-        ),
-    },
-    9: {
-        "name": "dynamic-noise-fl",
-        "fl": True,
-        "override": "exp_dynamic_noise_phase1",
-        "dynamic_noise": True,
-        "description": "FL + mid-run noise injection on angela (noise 0 -> 1.0 at 50% duration).",
-    },
-    10: {
-        "name": "dynamic-noise-nofl",
-        "fl": False,
-        "override": "exp_dynamic_noise_phase1",
-        "dynamic_noise": True,
-        "description": "Mid-run noise injection on angela, no FL.",
+        "description": "Same as et3-freerider-fedavg but FedMedian.",
     },
 }
 
@@ -383,7 +359,8 @@ def _run_one(
         cli("start-federated-learning")
 
     # ------------------------------------------------------------------
-    # 7. Run — with optional mid-run noise injection (experiments 3 & 4).
+    # 7. Run — with optional mid-run noise injection (legacy; unused by the
+    #    current matrix, all entries set dynamic_noise=False).
     # ------------------------------------------------------------------
     if exp["dynamic_noise"]:
         half = run_duration // 2
@@ -424,7 +401,7 @@ def main() -> int:
         choices=list(EXPERIMENTS),
         default=list(EXPERIMENTS),
         metavar="N",
-        help="Experiment numbers to run (default: all 10).",
+        help="Experiment numbers to run (default: all 7).",
     )
     parser.add_argument(
         "--seeds",
