@@ -796,7 +796,6 @@ def main() -> int:
         "delete-vehicles": ("POST", "/delete-vehicles"),
         "stop-producing-all": ("POST", "/stop-producing-all"),
         "stop-consuming-all": ("POST", "/stop-consuming-all"),
-        "start-federated-learning": ("POST", "/start-federated-learning"),
         "stop-federated-learning": ("POST", "/stop-federated-learning"),
         "start-automatic-attacks": ("POST", "/start-automatic-attacks"),
         "stop-automatic-attacks": ("POST", "/stop-automatic-attacks"),
@@ -841,9 +840,26 @@ def main() -> int:
         payload = {
             "default_consumer_config": state.get("default_consumer_config", {}),
             "vehicles": state.get("vehicles", []),
+            # Forward the selected architecture so consumers build the right model.
+            "anomaly_detection": state.get("anomaly_detection", {}),
         }
         try:
             result = client.http("POST", "/consume-all", json_payload=payload)
+        except requests.RequestException as exc:
+            print(f"Request failed: {exc}")
+            return 2
+        pretty_print_result(result)
+        return 0 if 200 <= result.status < 300 else 2
+
+    if args.command == "start-federated-learning":
+        # Send the selected aggregation strategy and model architecture so the FL
+        # manager runs them, instead of the dashboard's boot-time config.
+        payload = {
+            "federated_learning": state.get("federated_learning", {}),
+            "anomaly_detection": state.get("anomaly_detection", {}),
+        }
+        try:
+            result = client.http("POST", "/start-federated-learning", json_payload=payload)
         except requests.RequestException as exc:
             print(f"Request failed: {exc}")
             return 2
