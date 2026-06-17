@@ -1,0 +1,49 @@
+# ET3 — FL robustness-transfer, "clean free-rider" design.
+#
+# Goal: isolate whether federated learning transfers robustness from
+# adversarially-trained peers to a node that never trains adversarially.
+#
+# Training axis (the ONLY thing that differs between cells of the ET3 block is
+# FL on/off and the aggregation strategy):
+#   - bob/claude/daniel : adversarial_training=True at a COMMON augmentation
+#                         noise level (Mp_std=Bp_std=1.0).
+#   - angela            : the free-rider — adversarial_training=False, trains
+#                         on clean data only. Any robustness it gains can only
+#                         come through FL aggregation.
+#
+# Evaluation axis (held IDENTICAL for every vehicle, decoupled from training):
+#   - The Gaussian robustness eval is the fixed sigma-grid (sigma_grid_evaluation),
+#     computed on CLEAN samples — so the eval target no longer rides on each
+#     vehicle's Mp_std/Bp_std. This removes the confound where the old
+#     advtraining-fl eval moved from 0.0/0.7/1.4/2.1 to a uniform 1.0.
+#   - HSJA attacks CLEAN anchors (hsja_clean_anchors=true), so
+#     avg_perturbation / avg_queries measure the shared model boundary, not the
+#     anchor noise. This also fixes the "Angela's anchors start far from the
+#     boundary" interpretation issue.
+# Both eval knobs are pinned explicitly below so the comparison is self-contained.
+
+vehicles:
+  - angela:
+      Mp_std: 1.0
+      Bp_std: 1.0
+      adversarial_training: False
+
+  - bob:
+      Mp_std: 1.0
+      Bp_std: 1.0
+      adversarial_training: True
+
+  - claude:
+      Mp_std: 1.0
+      Bp_std: 1.0
+      adversarial_training: True
+
+  - daniel:
+      Mp_std: 1.0
+      Bp_std: 1.0
+      adversarial_training: True
+
+default_consumer_config:
+  # Identical eval target for the whole fleet, independent of training noise.
+  hsja_clean_anchors: true
+  eval_sigmas: [0.5, 1.0, 1.5, 2.0]
