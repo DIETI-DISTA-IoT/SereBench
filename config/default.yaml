@@ -168,6 +168,7 @@ default_consumer_config:
   hsja_n_per_class: 10      # samples per class attacked per evaluation round
   hsja_n_steps: 30          # boundary-walk iterations per sample
   hsja_n_grad_samples: 30   # random directions used for gradient estimation
+  hsja_init_noise_scale: 3.0  # std of Gaussian noise used to find the initial adversarial point
   # When true, HSJA attacks CLEAN anchor samples (identical threat model for
   # every vehicle), so avg_perturbation/avg_queries measure the model boundary
   # rather than each vehicle's producer eval-stream noise. Set false for the
