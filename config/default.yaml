@@ -182,7 +182,7 @@ default_consumer_config:
   # vector, the original/default behaviour). Set to [32, 33] to restrict
   # HSJA to usBpPres/usMpPres, matching the Gaussian adv_eval threat model
   # (Mp_std/Bp_std).
-  hsja_feature_indices: null
+  hsja_feature_indices: [32,33]
 
 anomaly_detection:
   output_dim: 3
