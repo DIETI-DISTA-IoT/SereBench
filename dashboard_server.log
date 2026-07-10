@@ -1,0 +1,118 @@
+2026-07-10 09:53:59,265 - MAIN - WARNING - wandb.online=true but no WANDB_API_KEY found — falling back to 'offline' mode (metrics still logged locally to ./wandb). Pass --wandb-mode online once you've run `wandb login`.
+2026-07-10 09:53:59,359 - MAIN - INFO - Launching offline dashboard on http://127.0.0.1:8000
+ * Serving Flask app 'offline_simulation.dashboard'
+ * Debug mode: off
+2026-07-10 09:53:59,367 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:8000
+2026-07-10 09:53:59,368 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-07-10 09:54:12,736 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:12] "GET / HTTP/1.1" 200 -
+2026-07-10 09:54:12,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:12] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:12,753 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:12] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:13,751 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:13] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:13,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:13] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:13,861 - ORCHESTRATOR - INFO - Starting experiment
+2026-07-10 09:54:13,861 - ORCHESTRATOR - INFO - Starting producers...
+2026-07-10 09:54:13,866 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:13] "POST /action/start-experiment HTTP/1.1" 200 -
+2026-07-10 09:54:13,878 - offline_simulation.brain - INFO - Architecture 'MLP' instantiated (5595 parameters).
+2026-07-10 09:54:14,754 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:14] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:14,755 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:14] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:15,582 - offline_simulation.brain - INFO - Architecture 'MLP' instantiated (5595 parameters).
+2026-07-10 09:54:15,589 - offline_simulation.brain - INFO - Architecture 'MLP' instantiated (5595 parameters).
+2026-07-10 09:54:15,594 - offline_simulation.brain - INFO - Architecture 'MLP' instantiated (5595 parameters).
+2026-07-10 09:54:15,595 - ORCHESTRATOR - INFO - Vehicles created: ['angela', 'bob', 'claude', 'daniel']
+2026-07-10 09:54:15,595 - [angela_PROD] - INFO - Starting anomalies thread for vehicle: angela
+2026-07-10 09:54:15,597 - [angela_PROD] - INFO - Starting normal-data thread for vehicle: angela
+2026-07-10 09:54:15,597 - [angela_PROD] - INFO - Producer started for vehicle angela
+2026-07-10 09:54:15,598 - [bob_PROD] - INFO - Starting anomalies thread for vehicle: bob
+2026-07-10 09:54:15,599 - [bob_PROD] - INFO - Starting normal-data thread for vehicle: bob
+2026-07-10 09:54:15,599 - [bob_PROD] - INFO - Producer started for vehicle bob
+2026-07-10 09:54:15,602 - [claude_PROD] - INFO - Starting anomalies thread for vehicle: claude
+2026-07-10 09:54:15,603 - [claude_PROD] - INFO - Starting normal-data thread for vehicle: claude
+2026-07-10 09:54:15,603 - [claude_PROD] - INFO - Producer started for vehicle claude
+2026-07-10 09:54:15,606 - [daniel_PROD] - INFO - Starting anomalies thread for vehicle: daniel
+2026-07-10 09:54:15,606 - [daniel_PROD] - INFO - Starting normal-data thread for vehicle: daniel
+2026-07-10 09:54:15,607 - [daniel_PROD] - INFO - Producer started for vehicle daniel
+2026-07-10 09:54:15,751 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:15] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:15,754 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:15] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:16,751 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:16] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:16,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:16] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:17,751 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:17] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:17,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:17] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:18,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:18] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:18,753 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:18] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:19,608 - ORCHESTRATOR - INFO - Starting consumers...
+2026-07-10 09:54:19,608 - ORCHESTRATOR - INFO - Vehicles created: ['angela', 'bob', 'claude', 'daniel']
+2026-07-10 09:54:19,610 - [angela_CONS] - INFO - Consumer runtime started for vehicle angela
+2026-07-10 09:54:19,611 - [bob_CONS] - INFO - Consumer runtime started for vehicle bob
+2026-07-10 09:54:19,612 - [claude_CONS] - INFO - Consumer runtime started for vehicle claude
+2026-07-10 09:54:19,613 - [daniel_CONS] - INFO - Consumer runtime started for vehicle daniel
+2026-07-10 09:54:19,638 - [bob_CONS] - INFO - [sigma-grid] captured 40 feature columns; pressure indices -> [32, 33]
+2026-07-10 09:54:19,640 - [claude_CONS] - INFO - [sigma-grid] captured 40 feature columns; pressure indices -> [32, 33]
+2026-07-10 09:54:19,751 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:19] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:19,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:19] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:20,178 - [angela_CONS] - INFO - [sigma-grid] captured 40 feature columns; pressure indices -> [32, 33]
+2026-07-10 09:54:20,191 - [daniel_CONS] - INFO - [sigma-grid] captured 40 feature columns; pressure indices -> [32, 33]
+2026-07-10 09:54:20,751 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:20] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:20,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:20] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:21,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:21] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:21,755 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:21] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:22,758 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:22] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:22,764 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:22] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:23,729 - [claude_PROD] - INFO - sent 500 records: 0 attacks, 176 anomalies, 149 diagnostics.
+2026-07-10 09:54:23,743 - [bob_PROD] - INFO - sent 500 records: 0 attacks, 174 anomalies, 152 diagnostics.
+2026-07-10 09:54:23,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:23] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:23,758 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:23] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:24,313 - [daniel_PROD] - INFO - sent 500 records: 0 attacks, 147 anomalies, 206 diagnostics.
+2026-07-10 09:54:24,614 - ORCHESTRATOR - INFO - Starting federated learning...
+2026-07-10 09:54:24,618 - FEDERATED_LEARNING - INFO - Global model (mlp) initialized using xavier initialization.
+2026-07-10 09:54:24,619 - FEDERATED_LEARNING - INFO - Starting FL for 4 vehicles: ['angela_weights', 'bob_weights', 'claude_weights', 'daniel_weights']
+2026-07-10 09:54:24,620 - ORCHESTRATOR - INFO - Federated learning started!
+2026-07-10 09:54:24,751 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:24] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:24,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:24] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:25,274 - [angela_PROD] - INFO - sent 500 records: 0 attacks, 136 anomalies, 228 diagnostics.
+2026-07-10 09:54:25,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:25] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:25,753 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:25] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:26,751 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:26] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:26,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:26] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:27,620 - ORCHESTRATOR - INFO - Starting wandb...
+2026-07-10 09:54:27,753 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:27] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:27,755 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:27] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:28,075 - ORCHESTRATOR - INFO - Shutting down experiment...
+2026-07-10 09:54:28,076 - ORCHESTRATOR - INFO - Automatic Attack Agent stopped!
+2026-07-10 09:54:28,078 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:28] "POST /action/shutdown HTTP/1.1" 200 -
+wandb: Tracking run with wandb version 0.28.0
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /app/wandb/offline-run-20260710_095427-g4jp1g88
+wandb: View this run in the terminal with `wandb leet`
+2026-07-10 09:54:28,297 - WANDBER - INFO - Wandb initialized in offline mode
+2026-07-10 09:54:28,298 - ORCHESTRATOR - INFO - WandB started!
+2026-07-10 09:54:28,620 - FEDERATED_LEARNING - INFO - Federated learning manager stopped.
+2026-07-10 09:54:28,621 - ORCHESTRATOR - INFO - Federated learning stopped!
+2026-07-10 09:54:28,751 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:28] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:28,755 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:28] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:29,117 - [angela_CONS] - INFO - Consumer stopped for vehicle angela
+2026-07-10 09:54:29,617 - [bob_CONS] - INFO - Consumer stopped for vehicle bob
+2026-07-10 09:54:29,702 - [claude_CONS] - INFO - Consumer stopped for vehicle claude
+2026-07-10 09:54:29,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:29] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:29,757 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:29] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:30,126 - [daniel_CONS] - INFO - Consumer stopped for vehicle daniel
+2026-07-10 09:54:30,751 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:30] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:30,752 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:30] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:31,239 - [angela_PROD] - INFO - Producer stopped for vehicle angela
+2026-07-10 09:54:31,282 - [bob_PROD] - INFO - Producer stopped for vehicle bob
+2026-07-10 09:54:31,299 - ORCHESTRATOR - INFO - Starting automatic attacks...
+2026-07-10 09:54:31,299 - ORCHESTRATOR - INFO - [BOTMASTER] Automatic attack at claude started.
+2026-07-10 09:54:31,300 - ORCHESTRATOR - INFO - Automatic Attack Agent started!
+2026-07-10 09:54:31,600 - ORCHESTRATOR - INFO - [BOTMASTER] Automatic attack at daniel started.
+2026-07-10 09:54:31,636 - [claude_PROD] - INFO - Producer stopped for vehicle claude
+2026-07-10 09:54:31,659 - [daniel_PROD] - INFO - Producer stopped for vehicle daniel
+2026-07-10 09:54:31,751 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:31] "GET /console-logs HTTP/1.1" 200 -
+2026-07-10 09:54:31,753 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2026 09:54:31] "GET /status HTTP/1.1" 200 -
+2026-07-10 09:54:31,901 - ORCHESTRATOR - INFO - [BOTMASTER] Automatic attack at bob started.
+2026-07-10 09:54:32,202 - ORCHESTRATOR - INFO - [BOTMASTER] Automatic attack at angela started.
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /app/wandb/offline-run-20260710_095427-g4jp1g88
+wandb: Find logs at: ./wandb/offline-run-20260710_095427-g4jp1g88/logs
+2026-07-10 09:54:32,307 - WANDBER - INFO - Wandber stopped.
+2026-07-10 09:54:32,307 - ORCHESTRATOR - INFO - WandB stopped!
+2026-07-10 09:54:32,307 - ORCHESTRATOR - INFO - Shutdown complete.

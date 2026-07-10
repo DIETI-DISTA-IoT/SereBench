@@ -105,12 +105,16 @@
           <tbody></tbody>
         </table>
       </div>
-      <div class="panel">
+      <div class="panel" style="margin-bottom:20px;">
         <h2>Run</h2>
         <div class="kv"><span>Federated learning</span><span id="fl">—</span></div>
         <div class="kv"><span>Aggregation rounds</span><span id="rounds">—</span></div>
         <div class="kv"><span>W&amp;B logging</span><span id="wandb">—</span></div>
         <div class="kv"><span>Automatic attacks</span><span id="autoatk">—</span></div>
+      </div>
+      <div class="panel">
+        <h2>Console Output</h2>
+        <div id="console-output" style="background:#090d16; color:#00ff66; font-family: monospace; font-size:12px; padding:12px; height:300px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; white-space: pre-wrap; word-break: break-all;"></div>
       </div>
     </div>
   </div>
@@ -129,6 +133,25 @@
     }
     async function attack(v) { await fetch('/attack/' + v, { method: 'POST' }); }
     async function heal(v) { await fetch('/heal/' + v, { method: 'POST' }); }
+
+    let firstLogLoad = true;
+    async function refreshLogs() {
+      try {
+        const res = await fetch('/console-logs');
+        const data = await res.json();
+        const consoleDiv = document.getElementById('console-output');
+        const newText = data.lines.join('\n');
+        if (consoleDiv.textContent !== newText) {
+          const isAtBottom = consoleDiv.scrollHeight - consoleDiv.clientHeight - consoleDiv.scrollTop < 40;
+          consoleDiv.textContent = newText;
+          if (isAtBottom || firstLogLoad) {
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            firstLogLoad = false;
+          }
+        }
+      } catch (e) { /* ignore transient errors */ }
+    }
+    setInterval(refreshLogs, 1000); refreshLogs();
 
     async function refresh() {
       try {
