@@ -165,10 +165,10 @@ default_consumer_config:
   # {vehicle}_statistics/hsja_adv_eval/* and {vehicle}_hsja_manifold_plot.
   # Set hsja_enabled: false to disable entirely (e.g. for lightweight runs).
   hsja_enabled: true
-  hsja_n_per_class: 10      # samples per class attacked per evaluation round
+  hsja_n_per_class: 5      # samples per class attacked per evaluation round
   hsja_n_steps: 30          # boundary-walk iterations per sample
-  hsja_n_grad_samples: 30   # random directions used for gradient estimation
-  hsja_init_noise_scale: 3.0  # std of Gaussian noise used to find the initial adversarial point
+  hsja_n_grad_samples: 10   # random directions used for gradient estimation
+  hsja_init_noise_scale: 150.0  # std of Gaussian noise used to find the initial adversarial point
   # When true, HSJA attacks CLEAN anchor samples (identical threat model for
   # every vehicle), so avg_perturbation/avg_queries measure the model boundary
   # rather than each vehicle's producer eval-stream noise. Set false for the
@@ -178,7 +178,7 @@ default_consumer_config:
   # (sigma_grid_evaluation). Applied to the usBpPres/usMpPres features of clean
   # anomaly/attack samples, identical across the whole fleet. Set to [] to
   # disable the sigma-grid eval entirely.
-  eval_sigmas: [0.5, 1.0, 1.5, 2.0]
+  eval_sigmas: [1.5, 2.0, 2.5, 3.0]
   # Feature indices the attack is allowed to perturb (null = whole 40-dim
   # vector, the original/default behaviour). Set to [32, 33] to restrict
   # HSJA to usBpPres/usMpPres, matching the Gaussian adv_eval threat model
