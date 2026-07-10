@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SereBench — Offline Simulation</title>
+  <style>
+    :root { --bg:#0f1420; --panel:#1a2233; --ink:#e7ecf5; --muted:#93a1bd;
+            --accent:#4f9cff; --good:#3ecf8e; --bad:#ff6b6b; --line:#2a3550; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+           background: var(--bg); color: var(--ink); }
+    header { padding: 20px 28px; border-bottom: 1px solid var(--line); display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
+    header h1 { font-size: 20px; margin:0; font-weight:650; }
+    header .sub { color: var(--muted); font-size: 13px; }
+    .wrap { display:grid; grid-template-columns: 340px 1fr; gap:20px; padding:20px 28px; }
+    @media (max-width: 820px) { .wrap { grid-template-columns: 1fr; } }
+    .panel { background: var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+    .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing:.06em; color: var(--muted);
+                margin:0 0 12px; font-weight:600; }
+    .group { margin-bottom: 18px; }
+    button { width:100%; text-align:left; background:#212c42; color:var(--ink); border:1px solid var(--line);
+             border-radius:8px; padding:9px 12px; margin:5px 0; cursor:pointer; font-size:13px; transition:.12s; }
+    button:hover { border-color: var(--accent); background:#26334c; }
+    button.primary { background: var(--accent); border-color: var(--accent); color:#04122b; font-weight:650; }
+    button.danger:hover { border-color: var(--bad); }
+    .row2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .row2 button { margin:0; }
+    table { width:100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
+    th { color: var(--muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+    .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:650; }
+    .pill.h { background: rgba(62,207,142,.15); color: var(--good); }
+    .pill.i { background: rgba(255,107,107,.15); color: var(--bad); }
+    .chips { display:flex; gap:8px; flex-wrap:wrap; }
+    .chip { background:#212c42; border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:12px;
+            display:flex; gap:8px; align-items:center; }
+    .chip button { width:auto; padding:3px 8px; margin:0; font-size:11px; }
+    .kv { display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px dashed var(--line); }
+    .kv span:first-child { color: var(--muted); }
+    #toast { position:fixed; bottom:18px; right:18px; background:#212c42; border:1px solid var(--accent);
+             border-radius:8px; padding:10px 14px; font-size:13px; opacity:0; transition:.2s; pointer-events:none; }
+    #toast.show { opacity:1; }
+    .hint { color: var(--muted); font-size:12px; margin-top:6px; line-height:1.5; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🚄 SereBench — Offline Simulation</h1>
+    <span class="sub">Single process · no Docker · no Kafka · press a button, a Python thread starts</span>
+  </header>
+
+  <div class="wrap">
+    <div class="panel">
+      <div class="group">
+        <h2>One click</h2>
+        <button class="primary" onclick="act('start-experiment')">▶ Start full experiment</button>
+        <button class="danger" onclick="act('shutdown')">■ Shutdown everything</button>
+        <div class="hint">Start experiment = producers → consumers → federated learning → W&B → automatic attacks.</div>
+      </div>
+
+      <div class="group">
+        <h2>Data plane</h2>
+        <div class="row2">
+          <button onclick="act('produce-all')">Produce all</button>
+          <button onclick="act('stop-producing-all')">Stop producing</button>
+          <button onclick="act('consume-all')">Consume all</button>
+          <button onclick="act('stop-consuming-all')">Stop consuming</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>Federated learning</h2>
+        <div class="row2">
+          <button onclick="act('start-federated-learning')">Start FL</button>
+          <button onclick="act('stop-federated-learning')">Stop FL</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>Observability (W&amp;B)</h2>
+        <div class="row2">
+          <button onclick="act('start-wandb')">Start W&amp;B</button>
+          <button onclick="act('stop-wandb')">Stop W&amp;B</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>Cyber-attacks</h2>
+        <div class="row2">
+          <button onclick="act('start-automatic-attacks')">Auto attacks</button>
+          <button onclick="act('stop-automatic-attacks')">Stop auto</button>
+          <button onclick="act('start-preconf-attack')">Preconf attack</button>
+          <button onclick="act('stop-preconf-attack')">Stop preconf</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:20px;">
+        <h2>Fleet status</h2>
+        <table id="fleet">
+          <thead><tr><th>Vehicle</th><th>Status</th><th>Epoch</th><th>Records</th>
+            <th>Atk / Anom / Diag</th><th>Manual</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h2>Run</h2>
+        <div class="kv"><span>Federated learning</span><span id="fl">—</span></div>
+        <div class="kv"><span>Aggregation rounds</span><span id="rounds">—</span></div>
+        <div class="kv"><span>W&amp;B logging</span><span id="wandb">—</span></div>
+        <div class="kv"><span>Automatic attacks</span><span id="autoatk">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 1600);
+    }
+    async function act(name) {
+      toast('▶ ' + name.replace(/-/g,' '));
+      await fetch('/action/' + name, { method: 'POST' });
+    }
+    async function attack(v) { await fetch('/attack/' + v, { method: 'POST' }); }
+    async function heal(v) { await fetch('/heal/' + v, { method: 'POST' }); }
+
+    async function refresh() {
+      try {
+        const s = await (await fetch('/status')).json();
+        const tb = document.querySelector('#fleet tbody');
+        tb.innerHTML = '';
+        for (const [v, d] of Object.entries(s.vehicles)) {
+          const cons = d.consumer || {}, prod = d.producer || {};
+          const infected = d.status === 'INFECTED';
+          const tr = document.createElement('tr');
+          tr.innerHTML =
+            `<td><b>${v}</b></td>` +
+            `<td><span class="pill ${infected?'i':'h'}">${d.status}</span></td>` +
+            `<td>${cons.epoch ?? '—'}</td>` +
+            `<td>${cons.records_processed ?? '—'}</td>` +
+            `<td>${(cons.attacks_processed ?? '—')} / ${(cons.anoms_processed ?? '—')} / ${(cons.diagnostics_processed ?? '—')}</td>` +
+            `<td><button onclick="${infected?`heal('${v}')`:`attack('${v}')`}">${infected?'Heal':'Attack'}</button></td>`;
+          tb.appendChild(tr);
+        }
+        const fl = s.federated_learning;
+        document.getElementById('fl').textContent = fl ? ('running · ' + fl.strategy) : 'stopped';
+        document.getElementById('rounds').textContent = fl ? fl.aggregation_rounds : '—';
+        document.getElementById('wandb').textContent = s.wandb_running ? 'running' : 'stopped';
+        document.getElementById('autoatk').textContent = s.automatic_attacks ? 'ON' : 'off';
+      } catch (e) { /* ignore transient errors */ }
+    }
+    setInterval(refresh, 1000); refresh();
+  </script>
+</body>
+</html>
