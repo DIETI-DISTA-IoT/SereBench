@@ -146,6 +146,7 @@ class ConsumerNode:
         # Clone to mimic Kafka's pickle round-trip (no shared tensors across nodes).
         payload = {k: v.detach().clone() for k, v in weights.items()}
         self.bus.produce(f"{self.vehicle_name}_weights", payload)
+        self.logger.info("Sent local weights to federated learning manager.")
 
     # -- lifecycle ---------------------------------------------------------
     def start(self):
@@ -303,7 +304,7 @@ class ConsumerNode:
                 _, new_weights = msg
                 self.brain.update_weights(new_weights)
                 self.brain.set_global_reference(new_weights)
-                self.logger.info("Local weights updated using global model.")
+                self.logger.info("Received and applied global weights from federated learning manager.")
 
     def _sleep(self, seconds):
         """Interruptible sleep so stop() is responsive during long FL intervals."""

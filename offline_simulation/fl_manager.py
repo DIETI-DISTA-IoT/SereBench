@@ -126,6 +126,8 @@ class FLManagerNode:
 
     def _process_message(self, topic, msg):
         if topic in self.weights_buffer:
+            vehicle_name = topic.replace("_weights", "")
+            self.logger.info(f"Received local weights from {vehicle_name}.")
             self.weights_buffer[topic].add(msg)
         if self.aggregation_interval_secs == 0:
             self._aggregate_weights()
@@ -177,8 +179,7 @@ class FLManagerNode:
         payload = {k: v.detach().clone() for k, v in self.global_model.state_dict().items()}
         self.bus.produce("global_weights", payload)
         self.logger.info(
-            f"AGGREGATION OK via '{self.config.get('aggregation_strategy')}' -> "
-            f"pushed global weights (round {self._agg_round}).")
+            f"Aggregated weights and sent global weights (round {self._agg_round}) to the nodes via '{self.config.get('aggregation_strategy')}'.")
 
     def status(self):
         return {
