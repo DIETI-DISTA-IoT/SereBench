@@ -36,6 +36,7 @@ from .brain import Brain
 from .buffers import Buffer
 from .simulator import EventType
 from .hopskipjump import hopskipjump_attack_batch
+from .packet_loss import PacketLossSimulator
 
 # usBpPres / usMpPres indices in the 40-dim vector; opt-in HSJA subset matching
 # the Gaussian Mp_std/Bp_std threat model (see consume.py).
@@ -90,6 +91,8 @@ class ConsumerNode:
         self.false_positive_reward = float(cfg.get('false_positive_reward', -4.0))
         self.false_negative_reward = float(cfg.get('false_negative_reward', -10.0))
 
+        self.packet_loss = PacketLossSimulator(cfg.get('packet_loss_rate', 0.1))
+
         # Brain (3-class classifier over NORMAL/ANOMALY/ATTACK).
         cfg['output_dim'] = 3
         self.brain = Brain(**cfg)
@@ -138,14 +141,24 @@ class ConsumerNode:
 
     # -- reporting shims (Kafka -> bus) ------------------------------------
     def _report_metrics(self, metrics):
+        topic = f"{self.vehicle_name}_statistics"
+        if self.packet_loss.should_drop():
+            self.logger.debug(f"[packet-loss] dropped statistics message for topic {topic} "
+                              f"(rate={self.packet_loss.packet_loss_rate})")
+            return
         stats = {'vehicle_name': self.vehicle_name}
         stats.update(metrics)
-        self.bus.produce(f"{self.vehicle_name}_statistics", stats)
+        self.bus.produce(topic, stats)
 
     def _push_weights(self, weights):
+        topic = f"{self.vehicle_name}_weights"
+        if self.packet_loss.should_drop():
+            self.logger.debug(f"[packet-loss] dropped weights update for topic {topic} "
+                              f"(rate={self.packet_loss.packet_loss_rate})")
+            return
         # Clone to mimic Kafka's pickle round-trip (no shared tensors across nodes).
         payload = {k: v.detach().clone() for k, v in weights.items()}
-        self.bus.produce(f"{self.vehicle_name}_weights", payload)
+        self.bus.produce(topic, payload)
         self.logger.info("Sent local weights to federated learning manager.")
 
     # -- lifecycle ---------------------------------------------------------
@@ -593,4 +606,5 @@ class ConsumerNode:
             'attacks_processed': self.attacks_processed,
             'anoms_processed': self.anoms_processed,
             'diagnostics_processed': self.diagnostics_processed,
+            'packet_loss': self.packet_loss.stats(),
         }

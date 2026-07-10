@@ -101,7 +101,7 @@
         <h2>Fleet status</h2>
         <table id="fleet">
           <thead><tr><th>Vehicle</th><th>Status</th><th>Epoch</th><th>Records</th>
-            <th>Atk / Anom / Diag</th><th>Manual</th></tr></thead>
+            <th>Atk / Anom / Diag</th><th>Packet loss (dropped/total)</th><th>Manual</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -109,6 +109,7 @@
         <h2>Run</h2>
         <div class="kv"><span>Federated learning</span><span id="fl">—</span></div>
         <div class="kv"><span>Aggregation rounds</span><span id="rounds">—</span></div>
+        <div class="kv"><span>FL packet loss (dropped/total)</span><span id="fl-loss">—</span></div>
         <div class="kv"><span>W&amp;B logging</span><span id="wandb">—</span></div>
         <div class="kv"><span>Automatic attacks</span><span id="autoatk">—</span></div>
       </div>
@@ -161,6 +162,9 @@
         for (const [v, d] of Object.entries(s.vehicles)) {
           const cons = d.consumer || {}, prod = d.producer || {};
           const infected = d.status === 'INFECTED';
+          const pLoss = prod.packet_loss || {}, cLoss = cons.packet_loss || {};
+          const pTotal = (pLoss.packets_sent ?? 0) + (pLoss.packets_dropped ?? 0);
+          const cTotal = (cLoss.packets_sent ?? 0) + (cLoss.packets_dropped ?? 0);
           const tr = document.createElement('tr');
           tr.innerHTML =
             `<td><b>${v}</b></td>` +
@@ -168,12 +172,16 @@
             `<td>${cons.epoch ?? '—'}</td>` +
             `<td>${cons.records_processed ?? '—'}</td>` +
             `<td>${(cons.attacks_processed ?? '—')} / ${(cons.anoms_processed ?? '—')} / ${(cons.diagnostics_processed ?? '—')}</td>` +
+            `<td>producer ${pLoss.packets_dropped ?? 0}/${pTotal} · consumer ${cLoss.packets_dropped ?? 0}/${cTotal}</td>` +
             `<td><button onclick="${infected?`heal('${v}')`:`attack('${v}')`}">${infected?'Heal':'Attack'}</button></td>`;
           tb.appendChild(tr);
         }
         const fl = s.federated_learning;
         document.getElementById('fl').textContent = fl ? ('running · ' + fl.strategy) : 'stopped';
         document.getElementById('rounds').textContent = fl ? fl.aggregation_rounds : '—';
+        const flLoss = (fl && fl.packet_loss) || {};
+        const flTotal = (flLoss.packets_sent ?? 0) + (flLoss.packets_dropped ?? 0);
+        document.getElementById('fl-loss').textContent = fl ? `${flLoss.packets_dropped ?? 0}/${flTotal}` : '—';
         document.getElementById('wandb').textContent = s.wandb_running ? 'running' : 'stopped';
         document.getElementById('autoatk').textContent = s.automatic_attacks ? 'ON' : 'off';
       } catch (e) { /* ignore transient errors */ }

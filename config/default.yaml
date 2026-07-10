@@ -30,7 +30,11 @@ federated_learning:
   yogi_beta1: 0.9
   yogi_beta2: 0.999
   yogi_epsilon: 0.001
-  
+  # Probability, in [0, 1], that a message emitted by the FL coordinator
+  # (global_weights / global_metrics) is silently dropped before reaching the
+  # message queue. Independent of each vehicle's own packet_loss_rate.
+  packet_loss_rate: 0.1
+
 security_manager:
   logging_level: ${logging_level}
   kafka_topic_update_interval_secs: ${kafka_topic_update_interval_secs}
@@ -110,26 +114,33 @@ default_vehicle_config:
   # so that experiments are reproducible across runs with the same seed.
   # Overridden per-run by experiments.py via 'set default_vehicle_config.seed <value>'.
   seed: 42
+  # Probability, in [0, 1], that any single message this vehicle emits (producer
+  # telemetry/health probes, consumer weights/statistics reports) is silently
+  # dropped before reaching the message queue (Kafka broker, or the in-process
+  # MessageBus in offline_simulation). Simulates a lossy uplink client-side,
+  # since neither Kafka nor the offline bus ever drop an accepted write.
+  # Override per-vehicle under 'vehicles:' below, e.g. 'bob: {packet_loss_rate: 0.3}'.
+  packet_loss_rate: 0.1
 
 
 vehicles:
   - angela:
-      #cpu_cores: "0,1,2,3,4" 
+      #cpu_cores: "0,1,2,3,4"
       Mp_std: 0
       Bp_std: 0
-  
+
   - bob:
-      #cpu_cores: "5,6,7,8,9" 
+      #cpu_cores: "5,6,7,8,9"
       Mp_std: 0.7
       Bp_std: 0.7
-  
+
   - claude:
-      #cpu_cores: "10,11,12,13,14" 
+      #cpu_cores: "10,11,12,13,14"
       Mp_std: 1.4
       Bp_std: 1.4
 
   - daniel:
-      #cpu_cores: "15,16,17,18,19" 
+      #cpu_cores: "15,16,17,18,19"
       Mp_std: 2.1
       Bp_std: 2.1
 
@@ -156,6 +167,12 @@ default_consumer_config:
   cpu_quota: ${default_vehicle_config.cpu_quota}
   cpu_cores: ${default_vehicle_config.cpu_cores}
   adversarial_training: ${default_vehicle_config.adversarial_training}
+  # Same lossy-uplink knob as the producer (see default_vehicle_config), applied
+  # to this vehicle's own outbound messages (weights pushed for FL, statistics
+  # reported to W&B). Defaults to the vehicle's rate; a per-vehicle override
+  # under 'vehicles:' (e.g. packet_loss_rate: 0.3) applies to both producer and
+  # consumer automatically, since both merge the same per-vehicle override dict.
+  packet_loss_rate: ${default_vehicle_config.packet_loss_rate}
   seed: 777
   # Only takes effect when aggregation_strategy is fedprox. (Setting to 0.0 recovers FedAvg behaviour).
   fedprox_mu: 0.01

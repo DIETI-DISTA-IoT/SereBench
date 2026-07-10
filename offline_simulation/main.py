@@ -149,14 +149,23 @@ def _log_summary(orch, logger):
     for v, d in s['vehicles'].items():
         c = d.get('consumer') or {}
         p = d.get('producer') or {}
+        p_loss = p.get('packet_loss') or {}
+        c_loss = c.get('packet_loss') or {}
         logger.info(
             f"  {v:8s} status={d['status']:8s} epoch={c.get('epoch', 0):>4} "
             f"consumed={c.get('records_processed', 0):>7} "
             f"produced={p.get('records_produced', 0):>7} "
             f"(atk/anom/diag processed={c.get('attacks_processed', 0)}/"
-            f"{c.get('anoms_processed', 0)}/{c.get('diagnostics_processed', 0)})")
+            f"{c.get('anoms_processed', 0)}/{c.get('diagnostics_processed', 0)}) "
+            f"packet_loss[producer]={p_loss.get('packets_dropped', 0)}/{p_loss.get('packets_sent', 0) + p_loss.get('packets_dropped', 0)} "
+            f"packet_loss[consumer]={c_loss.get('packets_dropped', 0)}/{c_loss.get('packets_sent', 0) + c_loss.get('packets_dropped', 0)}")
     fl = s.get('federated_learning')
-    logger.info(f"  federated_learning: {('rounds=' + str(fl['aggregation_rounds']) + ' strategy=' + str(fl['strategy'])) if fl else 'not started'}")
+    if fl:
+        fl_loss = fl.get('packet_loss') or {}
+        logger.info(f"  federated_learning: rounds={fl['aggregation_rounds']} strategy={fl['strategy']} "
+                    f"packet_loss={fl_loss.get('packets_dropped', 0)}/{fl_loss.get('packets_sent', 0) + fl_loss.get('packets_dropped', 0)}")
+    else:
+        logger.info("  federated_learning: not started")
     logger.info("=============================================")
 
 

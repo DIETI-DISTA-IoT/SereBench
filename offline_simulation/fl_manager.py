@@ -27,6 +27,7 @@ import torch
 from .models import build_model
 from .buffers import GenericBuffer
 from .aggregation import federated_averaging, FedYogi, fed_median, fed_prox
+from .packet_loss import PacketLossSimulator
 
 FEDERATED_LEARNING = "FEDERATED_LEARNING"
 
@@ -70,6 +71,8 @@ class FLManagerNode:
         self.logger.info(
             f"Starting FL for {len(self.vehicle_weights_topics)} vehicles: "
             f"{self.vehicle_weights_topics}")
+
+        self.packet_loss = PacketLossSimulator(self.config.get('packet_loss_rate', 0.1))
 
         self._agg_round = 0
         self._stop = False
@@ -175,6 +178,11 @@ class FLManagerNode:
             buffer.pop()
         self.global_model.load_state_dict(aggregated)
 
+        if self.packet_loss.should_drop():
+            self.logger.debug(f"[packet-loss] dropped global weights update "
+                              f"(rate={self.packet_loss.packet_loss_rate})")
+            return
+
         # Publish the fresh global model (clone to avoid cross-node aliasing).
         payload = {k: v.detach().clone() for k, v in self.global_model.state_dict().items()}
         self.bus.produce("global_weights", payload)
@@ -186,4 +194,5 @@ class FLManagerNode:
             'aggregation_rounds': self._agg_round,
             'vehicles': list(self.vehicle_weights_topics),
             'strategy': self.config.get('aggregation_strategy'),
+            'packet_loss': self.packet_loss.stats(),
         }

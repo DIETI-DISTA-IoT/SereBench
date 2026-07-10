@@ -28,6 +28,7 @@ import threading
 import numpy as np
 
 from .simulator import Train, EventType
+from .packet_loss import PacketLossSimulator
 
 HEALTHY = "HEALTHY"
 INFECTED = "INFECTED"
@@ -93,6 +94,8 @@ class ProducerNode:
         self.produced_anomalies = 0
         self.produced_diagnostics = 0
 
+        self.packet_loss = PacketLossSimulator(config.get('packet_loss_rate', 0.1))
+
         self._stop = False
         self._threads = []
 
@@ -124,8 +127,12 @@ class ProducerNode:
         return self._get_status(self.vehicle_name)
 
     def _produce(self, data, topic):
-        self.bus.produce(topic, data)
         self.produced_records += 1
+        if self.packet_loss.should_drop():
+            self.logger.debug(f"[packet-loss] dropped message for topic {topic} "
+                              f"(rate={self.packet_loss.packet_loss_rate})")
+            return
+        self.bus.produce(topic, data)
         if self.produced_records % 500 == 0:
             self.logger.info(
                 f"sent {self.produced_records} records: {self.produced_attacks} attacks, "
@@ -199,4 +206,5 @@ class ProducerNode:
             'anomalies_produced': self.produced_anomalies,
             'diagnostics_produced': self.produced_diagnostics,
             'under_attack': self._get_status_robust() == INFECTED,
+            'packet_loss': self.packet_loss.stats(),
         }
