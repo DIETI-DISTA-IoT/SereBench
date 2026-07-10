@@ -157,8 +157,8 @@ def _log_summary(orch, logger):
             f"produced={p.get('records_produced', 0):>7} "
             f"(atk/anom/diag processed={c.get('attacks_processed', 0)}/"
             f"{c.get('anoms_processed', 0)}/{c.get('diagnostics_processed', 0)}) "
-            f"packet_loss[producer]={p_loss.get('packets_dropped', 0)}/{p_loss.get('packets_sent', 0) + p_loss.get('packets_dropped', 0)} "
-            f"packet_loss[consumer]={c_loss.get('packets_dropped', 0)}/{c_loss.get('packets_sent', 0) + c_loss.get('packets_dropped', 0)}")
+            f"packet_loss[telemetry]={p_loss.get('packets_dropped', 0)}/{p_loss.get('packets_sent', 0) + p_loss.get('packets_dropped', 0)} "
+            f"packet_loss[weights->FL]={c_loss.get('packets_dropped', 0)}/{c_loss.get('packets_sent', 0) + c_loss.get('packets_dropped', 0)}")
     fl = s.get('federated_learning')
     if fl:
         fl_loss = fl.get('packet_loss') or {}

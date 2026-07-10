@@ -91,6 +91,8 @@ class ConsumerNode:
         self.false_positive_reward = float(cfg.get('false_positive_reward', -4.0))
         self.false_negative_reward = float(cfg.get('false_negative_reward', -10.0))
 
+        # Only used by _push_weights (the training-pipeline signal sent to the
+        # FL manager) — _report_metrics (W&B-bound) is never lossy.
         self.packet_loss = PacketLossSimulator(cfg.get('packet_loss_rate', 0.1))
 
         # Brain (3-class classifier over NORMAL/ANOMALY/ATTACK).
@@ -141,11 +143,10 @@ class ConsumerNode:
 
     # -- reporting shims (Kafka -> bus) ------------------------------------
     def _report_metrics(self, metrics):
+        # {vehicle}_statistics is what WandbNode subscribes to ('^.*_statistics$')
+        # for W&B logging (inference/robustness metrics, mitigation reward,
+        # plots, ...). Never subject to simulated packet loss.
         topic = f"{self.vehicle_name}_statistics"
-        if self.packet_loss.should_drop():
-            self.logger.debug(f"[packet-loss] dropped statistics message for topic {topic} "
-                              f"(rate={self.packet_loss.packet_loss_rate})")
-            return
         stats = {'vehicle_name': self.vehicle_name}
         stats.update(metrics)
         self.bus.produce(topic, stats)

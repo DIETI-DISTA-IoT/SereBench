@@ -172,7 +172,7 @@
             `<td>${cons.epoch ?? '—'}</td>` +
             `<td>${cons.records_processed ?? '—'}</td>` +
             `<td>${(cons.attacks_processed ?? '—')} / ${(cons.anoms_processed ?? '—')} / ${(cons.diagnostics_processed ?? '—')}</td>` +
-            `<td>producer ${pLoss.packets_dropped ?? 0}/${pTotal} · consumer ${cLoss.packets_dropped ?? 0}/${cTotal}</td>` +
+            `<td>telemetry ${pLoss.packets_dropped ?? 0}/${pTotal} · weights&rarr;FL ${cLoss.packets_dropped ?? 0}/${cTotal}</td>` +
             `<td><button onclick="${infected?`heal('${v}')`:`attack('${v}')`}">${infected?'Heal':'Attack'}</button></td>`;
           tb.appendChild(tr);
         }
