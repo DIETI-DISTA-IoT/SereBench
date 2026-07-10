@@ -1,0 +1,17 @@
+# Dependencies for the monolithic offline_simulation (no Docker, no Kafka).
+#
+# Only pure-Python / PyTorch pieces are needed — confluent-kafka, docker and
+# Flask-as-a-control-plane are all gone. Versions below are the ones the
+# offline simulation was validated with; looser pins are usually fine.
+#
+# torch is CPU-only for this workload. If your environment blocks the PyTorch
+# wheel index, a plain `pip install torch` from PyPI also works.
+
+numpy>=1.26
+torch>=2.1
+scikit-learn>=1.3
+omegaconf>=2.3          # same config engine Hydra uses in the dashboard
+pandas>=2.0            # required by plotly express to render the W&B figures
+plotly>=5.20           # interactive manifold / confusion-matrix plots for W&B
+wandb>=0.16            # observability (run with --wandb-mode offline for local)
+flask>=3.0            # only needed for the optional --dashboard UI
