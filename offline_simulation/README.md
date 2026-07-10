@@ -15,12 +15,18 @@ Press another, it stops. That's it.
 # from the SereBench repo root
 pip install -r offline_simulation/requirements.txt
 
+# Install pytorch is appart, so you can install cpu-only version if you want:
+pip3 install torch --index-url https://download.pytorch.org/whl/cpu
+
 # headless: run the full experiment for 3 minutes, log to W&B offline
 python -m offline_simulation.main --duration 180 --wandb-mode offline
 
 # or bring up the local dashboard and click the buttons (still no Docker!)
 python -m offline_simulation.main --dashboard
 #   -> open http://127.0.0.1:8000
+
+# use specific host/port overrides, e.g:
+python -m offline_simulation.main --dashboard --dashboard-host 192.168.183.146 --dashboard-port 5000
 ```
 
 ---
