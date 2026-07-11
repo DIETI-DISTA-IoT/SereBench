@@ -44,6 +44,24 @@ def _split_overrides(tokens):
     return override, dotlist
 
 
+def _has_wandb_credentials():
+    """True if W&B has any usable credentials for an online run.
+
+    ``wandb login`` — the documented way to authenticate — stores the API key
+    in ``~/.netrc``, *not* in the ``WANDB_API_KEY`` environment variable, so an
+    env-only check misses fully logged-in users. We defer to wandb's own key
+    resolution (``wandb.api.api_key`` reads env *and* netrc), and still honour
+    an explicit ``WANDB_MODE`` override.
+    """
+    if os.environ.get('WANDB_API_KEY') or os.environ.get('WANDB_MODE'):
+        return True
+    try:
+        import wandb
+        return bool(wandb.api.api_key)
+    except Exception:
+        return False
+
+
 def _effective_wandb_mode(requested, cfg):
     """Resolve the W&B mode, defaulting to a login-free mode when appropriate.
 
@@ -54,11 +72,13 @@ def _effective_wandb_mode(requested, cfg):
     if requested:
         return requested
     wants_online = bool(cfg.wandb.online)
-    if wants_online and not (os.environ.get('WANDB_API_KEY') or os.environ.get('WANDB_MODE')):
+    if wants_online and not _has_wandb_credentials():
         logging.getLogger("MAIN").warning(
-            "wandb.online=true but no WANDB_API_KEY found — falling back to "
+            "wandb.online=true but no W&B credentials found (checked "
+            "WANDB_API_KEY, WANDB_MODE and ~/.netrc) — falling back to "
             "'offline' mode (metrics still logged locally to ./wandb). "
-            "Pass --wandb-mode online once you've run `wandb login`.")
+            "Run `wandb login` (or set WANDB_API_KEY), or pass "
+            "--wandb-mode online to force it.")
         return 'offline'
     return None  # let the node map online/disabled from cfg.wandb.online
 
