@@ -28,6 +28,23 @@ Mp_std/Bp_std, so cross-condition comparisons are unconfounded.
     6. et3-freerider-fedyogi  Same as 4 but FedYogi.
     7. et3-freerider-fedmedian Same as 4 but FedMedian.
 
+  Block C — ET4 (does FL help a NETWORK-impaired free-rider?), ids 8..39:
+    Angela is the only vehicle with a degraded uplink (packet loss and/or added
+    delay+jitter on her producer->consumer telemetry AND her consumer->FL
+    weights upload); bob/claude/daniel keep a pristine network. Everyone trains
+    clean and shares the ET3 decoupled eval, so the impairment on angela is the
+    only moving part besides FL. Generated as the cross-product of 8 impairment
+    levels (3 packet-loss rates, 3 delay/jitter settings, 2 combinations) x 4 FL
+    modes (no-FL baseline + FedAvg + FedMedian + FedYogi):
+        8..11  et4-loss20-{nofl,fedavg,fedmedian,fedyogi}      angela loss 0.2
+        12..15 et4-loss40-*                                    angela loss 0.4
+        16..19 et4-loss60-*                                    angela loss 0.6
+        20..23 et4-delay100-*                    angela delay 100ms / jitter 25ms
+        24..27 et4-delay250-*                    angela delay 250ms / jitter 60ms
+        28..31 et4-delay500-*                   angela delay 500ms / jitter 125ms
+        32..35 et4-combo-lo-*             angela loss 0.2 + delay 100ms / jitter 25ms
+        36..39 et4-combo-hi-*             angela loss 0.4 + delay 250ms / jitter 60ms
+
 Run each across the three architectures via experiments.py (mlp),
 experiments_cnn.py (cnn) and experiments_resnet.py (resnet). Dynamic-noise
 experiments were dropped from the paper and are no longer part of the matrix.
@@ -43,8 +60,11 @@ between runs — it only starts and stops the services running inside them.
 
 Typical usage
 -------------
-  # All 7 experiments, 5 seeds each (~35 h at 1 h/run)
+  # All 39 experiments (7 canonical + 32 ET4), 5 seeds each
   python tests/experiments.py
+
+  # Just the ET4 network-free-rider block (ids 8..39)
+  python tests/experiments.py --experiments $(seq 8 39)
 
   # Specific experiments only
   python tests/experiments.py --experiments 1 2
@@ -186,6 +206,74 @@ EXPERIMENTS: dict[int, dict] = {
         "description": "Same as et3-freerider-fedavg but FedMedian.",
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# Block C — ET4 (does FL help a network-impaired free-rider?)
+# ---------------------------------------------------------------------------
+# Angela is the ONLY vehicle with a degraded uplink (packet loss and/or added
+# delay+jitter on BOTH her producer->consumer telemetry pipeline and her
+# consumer->FL-manager weights upload); bob/claude/daniel keep a pristine
+# network (0 loss, 0 delay, 0 jitter). Everyone trains clean and the eval is the
+# same decoupled HSJA-clean-anchors + fixed sigma-grid target as ET3, so ET4
+# numbers are directly comparable — the network impairment on angela is the only
+# moving part besides FL on/off + aggregation strategy.
+#
+# The block is generated programmatically (and appended to EXPERIMENTS with
+# contiguous integer ids after the hand-written 1..7 above) as the cross-product
+# of:
+#   * 8 impairment levels for angela — 3 packet-loss rates, 3 delay/jitter
+#     settings, 2 combinations of both (self-contained config overrides under
+#     config/overrides/exp_et4_angela_*.yaml, each re-listing all four vehicles
+#     since OmegaConf/Hydra replace the `vehicles:` list wholesale on merge);
+#   * 4 FL modes — a no-FL baseline plus FedAvg / FedMedian / FedYogi — so the
+#     benefit FL brings to angela can be read off directly at each level.
+# That is 8 * 4 = 32 experiments (ids 8..39). Every architecture runner
+# (experiments_cnn.py / experiments_resnet.py / experiments_all.py) imports this
+# same EXPERIMENTS dict, so the ET4 block runs across mlp/cnn/resnet unchanged.
+
+# (short_tag, override_profile, human description of angela's impairment)
+_ET4_LEVELS: list[tuple[str, str, str]] = [
+    ("loss20",   "exp_et4_angela_loss20",   "packet loss 0.2"),
+    ("loss40",   "exp_et4_angela_loss40",   "packet loss 0.4"),
+    ("loss60",   "exp_et4_angela_loss60",   "packet loss 0.6"),
+    ("delay100", "exp_et4_angela_delay100", "delay 100ms / jitter 25ms"),
+    ("delay250", "exp_et4_angela_delay250", "delay 250ms / jitter 60ms"),
+    ("delay500", "exp_et4_angela_delay500", "delay 500ms / jitter 125ms"),
+    ("combo-lo", "exp_et4_angela_combo_lo", "packet loss 0.2 + delay 100ms/25ms"),
+    ("combo-hi", "exp_et4_angela_combo_hi", "packet loss 0.4 + delay 250ms/60ms"),
+]
+
+# (mode_tag, fl_on, extra aggregation-strategy override applied on top, or None)
+_ET4_MODES: list[tuple[str, bool, str | None]] = [
+    ("nofl",      False, None),
+    ("fedavg",    True,  "fedavg"),
+    ("fedmedian", True,  "fedmedian"),
+    ("fedyogi",   True,  "fedyogi"),
+]
+
+
+def _extend_with_et4(experiments: dict[int, dict]) -> None:
+    """Append the 32-cell ET4 network-free-rider block to *experiments* in place."""
+    next_id = max(experiments) + 1
+    for level_tag, level_profile, level_desc in _ET4_LEVELS:
+        for mode_tag, fl_on, extra in _ET4_MODES:
+            override = level_profile if extra is None else (level_profile, extra)
+            fl_desc = "no FL" if not fl_on else f"FL ({mode_tag[len('fed'):].upper()})"
+            experiments[next_id] = {
+                "name": f"et4-{level_tag}-{mode_tag}",
+                "fl": fl_on,
+                "override": override,
+                "dynamic_noise": False,
+                "description": (
+                    f"ET4 network free-rider: angela {level_desc}, peers pristine "
+                    f"network. {fl_desc}."
+                ),
+            }
+            next_id += 1
+
+
+_extend_with_et4(EXPERIMENTS)
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +490,7 @@ def main() -> int:
         choices=list(EXPERIMENTS),
         default=list(EXPERIMENTS),
         metavar="N",
-        help="Experiment numbers to run (default: all 7).",
+        help="Experiment numbers to run (default: all; 1..7 canonical + 8..39 ET4).",
     )
     parser.add_argument(
         "--seeds",
