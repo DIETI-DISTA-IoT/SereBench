@@ -37,6 +37,7 @@ from .buffers import Buffer
 from .simulator import EventType
 from .hopskipjump import hopskipjump_attack_batch
 from .packet_loss import PacketLossSimulator
+from .network_delay import NetworkDelaySimulator
 
 # usBpPres / usMpPres indices in the 40-dim vector; opt-in HSJA subset matching
 # the Gaussian Mp_std/Bp_std threat model (see consume.py).
@@ -94,6 +95,8 @@ class ConsumerNode:
         # Only used by _push_weights (the training-pipeline signal sent to the
         # FL manager) — _report_metrics (W&B-bound) is never lossy.
         self.packet_loss = PacketLossSimulator(cfg.get('packet_loss_rate', 0.1))
+        self.network_delay = NetworkDelaySimulator(
+            cfg.get('delay_mean_ms', 0.0), cfg.get('jitter_std_ms', 0.0))
 
         # Brain (3-class classifier over NORMAL/ANOMALY/ATTACK).
         cfg['output_dim'] = 3
@@ -159,7 +162,7 @@ class ConsumerNode:
             return
         # Clone to mimic Kafka's pickle round-trip (no shared tensors across nodes).
         payload = {k: v.detach().clone() for k, v in weights.items()}
-        self.bus.produce(topic, payload)
+        self.network_delay.send(lambda: self.bus.produce(topic, payload))
         self.logger.info("Sent local weights to federated learning manager.")
 
     # -- lifecycle ---------------------------------------------------------
@@ -191,6 +194,8 @@ class ConsumerNode:
         self._threads = []
         if self._weights_consumer is not None:
             self._weights_consumer.close()
+        # Flush any weights still held by the simulated link and retire its worker.
+        self.network_delay.close()
         self.logger.info(f"Consumer stopped for vehicle {self.vehicle_name}")
 
     # -- data consuming (mirror consume.py) --------------------------------
@@ -608,4 +613,5 @@ class ConsumerNode:
             'anoms_processed': self.anoms_processed,
             'diagnostics_processed': self.diagnostics_processed,
             'packet_loss': self.packet_loss.stats(),
+            'network_delay': self.network_delay.stats(),
         }
