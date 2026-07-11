@@ -151,6 +151,8 @@ def _log_summary(orch, logger):
         p = d.get('producer') or {}
         p_loss = p.get('packet_loss') or {}
         c_loss = c.get('packet_loss') or {}
+        p_delay = p.get('network_delay') or {}
+        c_delay = c.get('network_delay') or {}
         logger.info(
             f"  {v:8s} status={d['status']:8s} epoch={c.get('epoch', 0):>4} "
             f"consumed={c.get('records_processed', 0):>7} "
@@ -158,12 +160,16 @@ def _log_summary(orch, logger):
             f"(atk/anom/diag processed={c.get('attacks_processed', 0)}/"
             f"{c.get('anoms_processed', 0)}/{c.get('diagnostics_processed', 0)}) "
             f"packet_loss[telemetry]={p_loss.get('packets_dropped', 0)}/{p_loss.get('packets_sent', 0) + p_loss.get('packets_dropped', 0)} "
-            f"packet_loss[weights->FL]={c_loss.get('packets_dropped', 0)}/{c_loss.get('packets_sent', 0) + c_loss.get('packets_dropped', 0)}")
+            f"packet_loss[weights->FL]={c_loss.get('packets_dropped', 0)}/{c_loss.get('packets_sent', 0) + c_loss.get('packets_dropped', 0)} "
+            f"delay[telemetry]~{p_delay.get('avg_applied_delay_ms', 0):.0f}ms "
+            f"delay[weights->FL]~{c_delay.get('avg_applied_delay_ms', 0):.0f}ms")
     fl = s.get('federated_learning')
     if fl:
         fl_loss = fl.get('packet_loss') or {}
+        fl_delay = fl.get('network_delay') or {}
         logger.info(f"  federated_learning: rounds={fl['aggregation_rounds']} strategy={fl['strategy']} "
-                    f"packet_loss={fl_loss.get('packets_dropped', 0)}/{fl_loss.get('packets_sent', 0) + fl_loss.get('packets_dropped', 0)}")
+                    f"packet_loss={fl_loss.get('packets_dropped', 0)}/{fl_loss.get('packets_sent', 0) + fl_loss.get('packets_dropped', 0)} "
+                    f"delay[global_weights]~{fl_delay.get('avg_applied_delay_ms', 0):.0f}ms")
     else:
         logger.info("  federated_learning: not started")
     logger.info("=============================================")

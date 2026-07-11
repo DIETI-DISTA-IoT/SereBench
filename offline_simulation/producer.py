@@ -29,6 +29,7 @@ import numpy as np
 
 from .simulator import Train, EventType
 from .packet_loss import PacketLossSimulator
+from .network_delay import NetworkDelaySimulator
 
 HEALTHY = "HEALTHY"
 INFECTED = "INFECTED"
@@ -95,6 +96,8 @@ class ProducerNode:
         self.produced_diagnostics = 0
 
         self.packet_loss = PacketLossSimulator(config.get('packet_loss_rate', 0.1))
+        self.network_delay = NetworkDelaySimulator(
+            config.get('delay_mean_ms', 0.0), config.get('jitter_std_ms', 0.0))
 
         self._stop = False
         self._threads = []
@@ -120,6 +123,9 @@ class ProducerNode:
         for t in self._threads:
             t.join(timeout=5)
         self._threads = []
+        # Flush any telemetry still held by the simulated link and retire its
+        # worker thread.
+        self.network_delay.close()
         self.logger.info(f"Producer stopped for vehicle {self.vehicle_name}")
 
     # -- helpers -----------------------------------------------------------
@@ -132,7 +138,7 @@ class ProducerNode:
             self.logger.debug(f"[packet-loss] dropped message for topic {topic} "
                               f"(rate={self.packet_loss.packet_loss_rate})")
             return
-        self.bus.produce(topic, data)
+        self.network_delay.send(lambda: self.bus.produce(topic, data))
         if self.produced_records % 500 == 0:
             self.logger.info(
                 f"sent {self.produced_records} records: {self.produced_attacks} attacks, "
@@ -207,4 +213,5 @@ class ProducerNode:
             'diagnostics_produced': self.produced_diagnostics,
             'under_attack': self._get_status_robust() == INFECTED,
             'packet_loss': self.packet_loss.stats(),
+            'network_delay': self.network_delay.stats(),
         }

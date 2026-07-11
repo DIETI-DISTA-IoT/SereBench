@@ -28,6 +28,7 @@ from .models import build_model
 from .buffers import GenericBuffer
 from .aggregation import federated_averaging, FedYogi, fed_median, fed_prox
 from .packet_loss import PacketLossSimulator
+from .network_delay import NetworkDelaySimulator
 
 FEDERATED_LEARNING = "FEDERATED_LEARNING"
 
@@ -73,6 +74,8 @@ class FLManagerNode:
             f"{self.vehicle_weights_topics}")
 
         self.packet_loss = PacketLossSimulator(self.config.get('packet_loss_rate', 0.1))
+        self.network_delay = NetworkDelaySimulator(
+            self.config.get('delay_mean_ms', 0.0), self.config.get('jitter_std_ms', 0.0))
 
         self._agg_round = 0
         self._stop = False
@@ -113,6 +116,8 @@ class FLManagerNode:
             self._aggregation_thread.join(timeout=self.aggregation_interval_secs + 5)
         if self._weights_consumer is not None:
             self._weights_consumer.close()
+        # Flush any global-weights update still held by the simulated link.
+        self.network_delay.close()
         self.logger.info("Federated learning manager stopped.")
 
     # -- threads (mirror manager_server.py) --------------------------------
@@ -185,7 +190,7 @@ class FLManagerNode:
 
         # Publish the fresh global model (clone to avoid cross-node aliasing).
         payload = {k: v.detach().clone() for k, v in self.global_model.state_dict().items()}
-        self.bus.produce("global_weights", payload)
+        self.network_delay.send(lambda: self.bus.produce("global_weights", payload))
         self.logger.info(
             f"Aggregated weights and sent global weights (round {self._agg_round}) to the nodes via '{self.config.get('aggregation_strategy')}'.")
 
@@ -195,4 +200,5 @@ class FLManagerNode:
             'vehicles': list(self.vehicle_weights_topics),
             'strategy': self.config.get('aggregation_strategy'),
             'packet_loss': self.packet_loss.stats(),
+            'network_delay': self.network_delay.stats(),
         }
