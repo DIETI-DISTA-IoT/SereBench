@@ -124,6 +124,81 @@ thread. No container is ever created.
 
 ---
 
+## Replicating the paper campaign — `experiments.py`
+
+`offline_simulation/experiments.py` is the in-process twin of the Dockerised
+`tests/experiments.py` (+ `_cnn` / `_resnet` / `_all`). Those runners drive the
+container cluster over the dashboard's HTTP control plane (via `tests/dash_cli.py`);
+this one drives an in-process `Orchestrator` instead — **same experiment matrix,
+same config overrides, same seeds, same startup order and cadence, no Docker and
+no Kafka.** It's the way to reproduce the full benchmark campaign on a laptop or
+CI box.
+
+```bash
+pip install -r offline_simulation/requirements.txt
+pip3 install torch --index-url https://download.pytorch.org/whl/cpu   # CPU-only
+
+# All 7 experiments (MLP), 3 seeds each, 10 min per run, W&B offline
+python -m offline_simulation.experiments
+
+# Quick smoke: one experiment, one seed, 60 s, fast warmup
+python -m offline_simulation.experiments \
+    --experiments 1 --seeds 42 --run-duration 60 --settle 0.2
+
+# Every architecture, FL block only (FedAvg/FedProx/FedYogi/FedMedian)
+python -m offline_simulation.experiments --arch all --experiments 4 5 6 7
+
+# Continue past failures instead of aborting the batch
+python -m offline_simulation.experiments --skip-on-error
+```
+
+### The experiment matrix (identical to `tests/experiments.py`)
+
+| # | Name | FL | Config override(s) |
+|---|------|----|--------------------|
+| 1 | `et2-noadv-nofl`        | – | *(defaults)* |
+| 2 | `et2-adv-nofl`          | – | `exp_advtraining` |
+| 3 | `et3-freerider-nofl`    | – | `exp_et3_freerider` |
+| 4 | `et3-freerider-fedavg`  | ✓ | `exp_et3_freerider` |
+| 5 | `et3-freerider-fedprox` | ✓ | `exp_et3_freerider` + `fedprox` |
+| 6 | `et3-freerider-fedyogi` | ✓ | `exp_et3_freerider` + `fedyogi` |
+| 7 | `et3-freerider-fedmedian`| ✓ | `exp_et3_freerider` + `fedmedian` |
+
+`--arch {mlp,cnn,resnet,all}` merges the `cnn`/`resnet` override on top (mlp is
+the default) and suffixes the W&B run/group names (`-cnn`, `-resnet`), exactly as
+the per-architecture Dockerised runners do.
+
+### How it maps onto `tests/experiments.py`
+
+| Dockerised (`tests/experiments.py` → `dash_cli.py` → HTTP) | Offline (`experiments.py` → `Orchestrator` method) |
+|-------------------------------------------------------------|----------------------------------------------------|
+| `init-config` + repeated `apply-override` + `set …`         | `build_config()` (OmegaConf load + deep-merge + dotlist) |
+| `start-wandb`                                                | `orchestrator.start_wandb()` |
+| `produce-all`                                               | `orchestrator.produce_all()` |
+| `start-automatic-attacks`                                  | `orchestrator.start_automatic_attacks()` |
+| `consume-all`                                               | `orchestrator.consume_all()` |
+| `start-federated-learning`                                 | `orchestrator.start_federated_learning()` |
+| `shutdown`                                                  | `orchestrator.shutdown()` |
+
+The startup order and inter-step warmup (produce → wait → attacks → wait →
+consume → wait → FL) is preserved; the warmup delays are scaled by `--settle`
+(1.0 = platform timing). Unlike the Dockerised runner there are no vehicle
+containers to `create-vehicles` / `delete-vehicles` — each run builds a fresh
+in-process cluster from config and tears it down.
+
+### Extra flags (beyond the shared matrix)
+
+| Flag | Meaning |
+|------|---------|
+| `--arch mlp\|cnn\|resnet\|all` | architecture(s) to sweep (default `mlp`) |
+| `--run-duration N` | seconds per run (default 600) |
+| `--wandb-mode {online,offline,disabled}` | W&B mode for every run (default `offline`) |
+| `--settle F` | scale the startup warmup delays (default 1.0) |
+| `--no-attacks` / `--no-wandb` | skip a component across all runs |
+| `--skip-on-error` | log a failed run and continue the batch |
+
+---
+
 ## Fidelity — how faithful is it?
 
 **Vendored verbatim** (byte-identical copies of the sereBench-branch sources —
