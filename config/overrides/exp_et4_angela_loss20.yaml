@@ -1,0 +1,67 @@
+# ET4 — "Angela network free-rider" block (Block C).
+#
+# Goal: isolate whether federated learning helps a single node whose *network*
+# is degraded, while its peers enjoy a pristine link. This is the network-
+# impairment analogue of the ET3 clean free-rider (which varied the *training*
+# axis): here the only disadvantage angela carries is a lossy and/or slow
+# uplink on BOTH her producer->consumer telemetry pipeline and her
+# consumer->FL-manager weights upload. bob/claude/daniel keep a perfect
+# network (0 packet loss, 0 delay, 0 jitter).
+#
+# What differs across the ET4 block is ONLY (a) angela's impairment level and
+# (b) FL on/off + aggregation strategy. Held identical everywhere:
+#   - training: clean for all four vehicles (adversarial_training=False);
+#   - FL downlink: pristine (federated_learning packet_loss_rate/delay all 0)
+#     so the FL benefit under test is never itself sabotaged — only angela's
+#     *uplink* is impaired;
+#   - evaluation: the same decoupled target as ET3 (HSJA on clean anchors +
+#     a fixed Gaussian sigma-grid), so ET4 numbers are directly comparable.
+#
+# Angela's impairment for THIS file: packet loss 0.2 (delay off).
+
+default_vehicle_config:
+  # Pristine baseline for the whole fleet; angela is bumped up in the
+  # per-vehicle block below. Peers inherit these zeros (no override).
+  packet_loss_rate: 0.0
+  delay_mean_ms: 0.0
+  jitter_std_ms: 0.0
+  adversarial_training: False
+
+federated_learning:
+  # Keep the FL coordinator's global_weights downlink perfect: the experiment
+  # asks whether FL *helps* angela, so its delivery must not be impaired too.
+  packet_loss_rate: 0.0
+  delay_mean_ms: 0.0
+  jitter_std_ms: 0.0
+
+default_consumer_config:
+  # Identical decoupled eval target for every vehicle (as in exp_et3_freerider),
+  # so ET4 robustness numbers line up with the ET3 block.
+  hsja_clean_anchors: true
+  eval_sigmas: [0.5, 1.0, 1.5, 2.0]
+
+vehicles:
+  - angela:
+      Mp_std: 0
+      Bp_std: 0
+      packet_loss_rate: 0.2
+      delay_mean_ms: 0.0
+      jitter_std_ms: 0.0
+  - bob:
+      Mp_std: 0
+      Bp_std: 0
+      packet_loss_rate: 0.0
+      delay_mean_ms: 0.0
+      jitter_std_ms: 0.0
+  - claude:
+      Mp_std: 0
+      Bp_std: 0
+      packet_loss_rate: 0.0
+      delay_mean_ms: 0.0
+      jitter_std_ms: 0.0
+  - daniel:
+      Mp_std: 0
+      Bp_std: 0
+      packet_loss_rate: 0.0
+      delay_mean_ms: 0.0
+      jitter_std_ms: 0.0

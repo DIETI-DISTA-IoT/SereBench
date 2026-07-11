@@ -138,7 +138,7 @@ CI box.
 pip install -r offline_simulation/requirements.txt
 pip3 install torch --index-url https://download.pytorch.org/whl/cpu   # CPU-only
 
-# All 7 experiments (MLP), 3 seeds each, 10 min per run, W&B offline
+# All 39 experiments (7 canonical + 32 ET4, MLP), 3 seeds each, W&B offline
 python -m offline_simulation.experiments
 
 # Quick smoke: one experiment, one seed, 60 s, fast warmup
@@ -147,6 +147,9 @@ python -m offline_simulation.experiments \
 
 # Every architecture, FL block only (FedAvg/FedProx/FedYogi/FedMedian)
 python -m offline_simulation.experiments --arch all --experiments 4 5 6 7
+
+# ET4 network-free-rider block (ids 8..39) across every architecture
+python -m offline_simulation.experiments --arch all --experiments $(seq 8 39)
 
 # Continue past failures instead of aborting the batch
 python -m offline_simulation.experiments --skip-on-error
@@ -163,6 +166,33 @@ python -m offline_simulation.experiments --skip-on-error
 | 5 | `et3-freerider-fedprox` | ✓ | `exp_et3_freerider` + `fedprox` |
 | 6 | `et3-freerider-fedyogi` | ✓ | `exp_et3_freerider` + `fedyogi` |
 | 7 | `et3-freerider-fedmedian`| ✓ | `exp_et3_freerider` + `fedmedian` |
+
+**Block C — ET4 (does FL help a *network*-impaired free-rider?), ids 8..39.**
+Angela is the only vehicle with a degraded uplink — packet loss and/or added
+delay+jitter on *both* her producer→consumer telemetry pipeline and her
+consumer→FL weights upload (`offline_simulation/packet_loss.py` +
+`network_delay.py`); bob/claude/daniel keep a pristine network. Everyone trains
+clean and shares the ET3 decoupled eval (HSJA clean anchors + fixed sigma grid),
+so angela's impairment is the only moving part besides FL. The block is the
+cross-product of 8 impairment levels × 4 FL modes (no-FL baseline + FedAvg +
+FedMedian + FedYogi):
+
+| ids | Level | Angela's impairment (peers = 0/0/0) | Config override |
+|-----|-------|-------------------------------------|-----------------|
+| 8..11  | `et4-loss20-{nofl,fedavg,fedmedian,fedyogi}`   | packet loss 0.2                     | `exp_et4_angela_loss20` |
+| 12..15 | `et4-loss40-*`                                 | packet loss 0.4                     | `exp_et4_angela_loss40` |
+| 16..19 | `et4-loss60-*`                                 | packet loss 0.6                     | `exp_et4_angela_loss60` |
+| 20..23 | `et4-delay100-*`                               | delay 100 ms / jitter 25 ms         | `exp_et4_angela_delay100` |
+| 24..27 | `et4-delay250-*`                               | delay 250 ms / jitter 60 ms         | `exp_et4_angela_delay250` |
+| 28..31 | `et4-delay500-*`                               | delay 500 ms / jitter 125 ms        | `exp_et4_angela_delay500` |
+| 32..35 | `et4-combo-lo-*`                               | loss 0.2 + delay 100 ms / 25 ms     | `exp_et4_angela_combo_lo` |
+| 36..39 | `et4-combo-hi-*`                               | loss 0.4 + delay 250 ms / 60 ms     | `exp_et4_angela_combo_hi` |
+
+The `fedavg` / `fedmedian` / `fedyogi` modes append the matching aggregation
+override on top of the level file (the `nofl` mode applies none); the FL
+coordinator's `global_weights` downlink is held pristine in every ET4 cell so the
+FL benefit under test is never itself sabotaged — only angela's *uplink* is
+impaired.
 
 `--arch {mlp,cnn,resnet,all}` merges the `cnn`/`resnet` override on top (mlp is
 the default) and suffixes the W&B run/group names (`-cnn`, `-resnet`), exactly as
