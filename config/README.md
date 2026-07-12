@@ -341,10 +341,30 @@ high-frequency telemetry path:
 
 A calibration run also confirmed the flow is cleanly isolated
 (`packet_loss[telemetry] = 0/37256`, `delay[telemetry] ~0 ms` while the weights
-path is degraded) and that **automatic attacks must be on** for training to
-progress: a consumer only forms a training batch when its NORMAL, ANOMALY **and**
-ATTACK buffers are all full, so `--no-attacks` leaves the attack buffer empty and
-no epoch ever completes.
+path is degraded).
+
+3. **Startup order (offline runner).** A consumer only forms a training batch
+   when its NORMAL, ANOMALY **and** ATTACK buffers are all full, and the
+   producer's anomaly thread emits ATTACK (not ANOMALY) whenever the vehicle is
+   INFECTED (`producer.py`). So the consumers must warm their ANOMALY buffers on
+   a still-healthy stream **before the first attack**. Calibration exposed that
+   the offline campaign runner was starting automatic attacks *before* the
+   consumers subscribed (`produce -> attacks -> consume`): because the in-process
+   `MessageBus` does not replay backlog to a late subscriber, the anomaly stream
+   had already flipped to ATTACK by the time a consumer was listening, so the
+   ANOMALY buffer never filled and every model sat at `epoch 0` — verified for a
+   full 300 s run on both canonical ET1 and an ET5 cell (the FL flow itself
+   logged 20 clean rounds; the models simply never trained). The fix is in
+   `offline_simulation/experiments.py`: it now starts consumers (and FL) **before**
+   automatic attacks, matching `orchestrator.start_experiment`'s documented
+   "attacks last" order — with which a normal realtime-rate run trains fine
+   (epochs ~20, anomalies flowing, vehicles healing). This is a **campaign-wide**
+   fix (ET1–ET5 all benefit), not ET5-specific, and it is the ONE point where the
+   offline runner deliberately diverges from the Dockerised `tests/experiments.py`
+   (which keeps `produce -> attacks -> consume`): on Docker a Kafka consumer with
+   `auto_offset_reset=earliest` replays the pre-attack anomaly backlog, so that
+   order is safe there. (`--no-attacks` is a separate trap — it leaves the ATTACK
+   buffer empty and also stalls training; keep automatic attacks on.)
 
 | Level file | uplink+downlink loss | uplink+downlink delay / jitter |
 |------------|----------------------|--------------------------------|

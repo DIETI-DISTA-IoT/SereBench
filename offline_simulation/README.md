@@ -224,6 +224,15 @@ Two **calibrated** design choices make the stress observable (see
    ET4. A few hundred ms is meaningful on ET4's high-frequency *telemetry* path but
    negligible on the low-frequency FL *weights* path.
 
+Calibration also surfaced (and fixed) a **campaign-wide** offline-runner bug that
+was unrelated to ET5 but blocked *any* training offline: the runner was starting
+automatic attacks before consumers subscribed, and since the in-process bus does
+not replay backlog to a late subscriber, the anomaly stream had already flipped
+ANOMALY→ATTACK and every model stalled at `epoch 0`. `experiments.py` now starts
+consumers (and FL) **before** attacks — matching `orchestrator.start_experiment`'s
+"attacks last" order (see the *Startup order* note below). The Dockerised runner
+keeps its own order because Kafka's `earliest` offset replays the backlog.
+
 The block is a network-invariant no-FL floor (id 40) plus the cross-product of 9
 FL-flow conditions × 4 strategies (FedAvg / FedMedian / FedYogi / FedProx):
 
@@ -266,11 +275,22 @@ the per-architecture Dockerised runners do.
 | `start-federated-learning`                                 | `orchestrator.start_federated_learning()` |
 | `shutdown`                                                  | `orchestrator.shutdown()` |
 
-The startup order and inter-step warmup (produce → wait → attacks → wait →
-consume → wait → FL) is preserved; the warmup delays are scaled by `--settle`
-(1.0 = platform timing). Unlike the Dockerised runner there are no vehicle
-containers to `create-vehicles` / `delete-vehicles` — each run builds a fresh
-in-process cluster from config and tears it down.
+The inter-step warmup delays are scaled by `--settle` (1.0 = platform timing).
+Unlike the Dockerised runner there are no vehicle containers to
+`create-vehicles` / `delete-vehicles` — each run builds a fresh in-process
+cluster from config and tears it down.
+
+**Startup order — one deliberate difference.** The Dockerised runner sequences
+produce → **attacks** → consume → FL. The offline runner sequences produce →
+consume → FL → **attacks** (attacks last), matching
+`orchestrator.start_experiment`. The reason is transport fidelity: a Kafka
+consumer with `auto_offset_reset=earliest` replays the pre-attack anomaly
+backlog, so on Docker a consumer that subscribes after attacks still fills its
+ANOMALY buffer; the in-process `MessageBus` does not replay backlog to a late
+subscriber, so offline the consumers must warm their ANOMALY buffers on a
+still-healthy stream before the first attack — otherwise the producer's anomaly
+stream has already flipped ANOMALY→ATTACK and no model ever completes an epoch.
+The experiment **matrix** is identical across the two runners.
 
 ### Extra flags (beyond the shared matrix)
 

@@ -74,18 +74,28 @@ extra override). W&B group / run names get an architecture suffix so results
 land alongside, but distinct from, the other architectures — exactly like
 ``tests/experiments_cnn.py`` and ``tests/experiments_resnet.py``.
 
-Startup order (per run) — mirrors tests/experiments.py exactly
---------------------------------------------------------------
+Startup order (per run)
+-----------------------
   start-wandb               (open the W&B run first, so no metrics are missed)
   produce-all               (data must flow before consumers or FL start)
-  sleep 5 s                 (let producers warm the anomaly buffers)
-  start-automatic-attacks   (attack-class data present before classification)
-  sleep 5 s                 (let the attack stream stabilise)
-  consume-all               (consumers now find an active, mixed-class stream)
-  sleep 5 s                 (let consumers initialise)
+  sleep 5 s                 (let producers warm up)
+  consume-all               (consumers subscribe and warm their anomaly buffers)
+  sleep 5 s                 (fill the ANOMALY buffer past batch_size — pre-attack)
   start-federated-learning  (FL experiments only)
+  start-automatic-attacks   (LAST — inject the ATTACK class now buffers are warm)
+  sleep 5 s                 (let the attack stream stabilise)
   --- experiment runs for --run-duration seconds ---
   shutdown                  (sequential teardown, same order as the dashboard)
+
+NOTE — this is the ONE deliberate divergence from tests/experiments.py, which
+starts attacks BEFORE consumers (produce -> attacks -> consume). That order is
+safe on Docker because a Kafka consumer with auto_offset_reset=earliest replays
+the pre-attack anomaly backlog; the in-process MessageBus does NOT replay backlog
+to a late subscriber, so here consumers must warm their anomaly buffers on a
+still-healthy stream before the first attack — otherwise the producer's anomaly
+stream has already flipped ANOMALY->ATTACK and no model ever completes an epoch.
+This matches orchestrator.start_experiment's documented "attacks last" order.
+The experiment MATRIX (below) stays identical to tests/experiments.py.
 
 Typical usage
 -------------
@@ -495,18 +505,33 @@ def run_one(exp: dict, arch: str, seed: int, run_idx: int, *,
         orch.produce_all()
         _sleep(_DELAY_AFTER_PRODUCE * settle, "letting producers warm up")
 
-        # 3. Automatic attacks — attack-class data present before classifying.
+        # 3. Consumers BEFORE attacks — they warm their anomaly buffers on a
+        #    still-healthy stream. This is the one place the offline runner
+        #    deliberately diverges from tests/experiments.py (produce -> attacks
+        #    -> consume) and instead follows orchestrator.start_experiment's
+        #    "attacks last" order. Reason: the in-process MessageBus does NOT
+        #    replay backlog to a consumer that subscribes late, so if attacks
+        #    started first the producer's anomaly stream would have already
+        #    flipped ANOMALY->ATTACK (producer.py) and the consumer would never
+        #    see the clean anomalies it needs to fill its ANOMALY buffer past
+        #    batch_size — leaving every model stuck at epoch 0. The Dockerised
+        #    runner can start attacks first because a Kafka consumer with
+        #    auto_offset_reset=earliest replays the pre-attack backlog; the
+        #    offline bus cannot, so consumers must be warm before the first
+        #    attack. See orchestrator.start_experiment and config/README.md.
+        orch.consume_all()
+        _sleep(_DELAY_AFTER_CONSUME * settle, "warming consumer anomaly buffers (pre-attack)")
+
+        # 4. Federated learning (FL experiments only) — started before attacks so
+        #    aggregation is already running when the ATTACK class appears.
+        if exp["fl"]:
+            orch.start_federated_learning()
+
+        # 5. Automatic attacks LAST — buffers are warm, now inject the ATTACK
+        #    class (flips the producer's ANOMALY stream while INFECTED).
         if with_attacks:
             orch.start_automatic_attacks()
             _sleep(_DELAY_AFTER_ATTACKS * settle, "letting attack stream stabilise")
-
-        # 4. Consumers — now find an active, mixed-class data stream.
-        orch.consume_all()
-        _sleep(_DELAY_AFTER_CONSUME * settle, "letting consumers initialise")
-
-        # 5. Federated learning (FL experiments only).
-        if exp["fl"]:
-            orch.start_federated_learning()
 
         # 6. Run.
         _sleep(run_duration, "experiment running")
