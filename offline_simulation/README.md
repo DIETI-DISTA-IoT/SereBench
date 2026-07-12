@@ -138,7 +138,7 @@ CI box.
 pip install -r offline_simulation/requirements.txt
 pip3 install torch --index-url https://download.pytorch.org/whl/cpu   # CPU-only
 
-# All 39 experiments (7 canonical + 32 ET4, MLP), 3 seeds each, W&B offline
+# All 76 experiments (7 canonical + 32 ET4 + 37 ET5, MLP), 3 seeds each, W&B offline
 python -m offline_simulation.experiments
 
 # Quick smoke: one experiment, one seed, 60 s, fast warmup
@@ -150,6 +150,10 @@ python -m offline_simulation.experiments --arch all --experiments 4 5 6 7
 
 # ET4 network-free-rider block (ids 8..39) across every architecture
 python -m offline_simulation.experiments --arch all --experiments $(seq 8 39)
+
+# ET5 FL-flow-stress block (ids 40..76): FL-algorithm tolerance to a lossy/slow
+# FL flow, identical fleet, no free rider
+python -m offline_simulation.experiments --experiments $(seq 40 76)
 
 # Continue past failures instead of aborting the batch
 python -m offline_simulation.experiments --skip-on-error
@@ -193,6 +197,58 @@ override on top of the level file (the `nofl` mode applies none); the FL
 coordinator's `global_weights` downlink is held pristine in every ET4 cell so the
 FL benefit under test is never itself sabotaged — only angela's *uplink* is
 impaired.
+
+**Block D — ET5 (which FL strategy best tolerates a degraded FL *flow*?), ids 40..76.**
+ET5 asks the complement of ET4. There is **no free rider**: all four vehicles are
+identical (clean config, no adversarial training) and the impairment is applied
+**uniformly to the whole fleet _and_ to the FL coordinator**, so the question is
+which aggregation strategy degrades most gracefully as the FL flow itself gets
+lossy/slow. The **only** degraded path is the FL flow — the consumer→FL-manager
+weights *uplink* (`default_consumer_config.*`) **and** the FL-manager→consumers
+`global_weights` *downlink* (`federated_learning.*`); the producer→consumer
+telemetry pipeline is held **pristine** (0 loss / 0 delay), so local training data
+is never starved and only the aggregation transport is under stress. Everyone
+shares the ET3/ET4 decoupled eval (HSJA clean anchors + fixed sigma-grid), so ET5
+numbers line up with the rest of the campaign.
+
+Two **calibrated** design choices make the stress observable (see
+`config/README.md`, *ET5 calibration*, and the header of any
+`config/overrides/exp_et5_flow_*.yaml`):
+
+1. **Fast FL cadence** — push/pull every **15 s**, aggregate every **5 s**, instead
+   of the platform default 120 s / 20 s. At the default cadence a 10-min run yields
+   only a handful of weight pushes, so packet loss is statistically coarse and a
+   sub-second delay is a no-op against a 120 s push interval. The fast cadence
+   exercises the flow **~40×/run**.
+2. **Delay scaled to that interval** — 1.5 s / 4 s / 8 s, not the few-hundred-ms of
+   ET4. A few hundred ms is meaningful on ET4's high-frequency *telemetry* path but
+   negligible on the low-frequency FL *weights* path.
+
+The block is a network-invariant no-FL floor (id 40) plus the cross-product of 9
+FL-flow conditions × 4 strategies (FedAvg / FedMedian / FedYogi / FedProx):
+
+| ids | Level | FL-flow impairment (uplink + downlink, whole fleet) | Config override |
+|-----|-------|-----------------------------------------------------|-----------------|
+| 40      | `et5-flow-nofl-floor`                                     | *(no FL — network-invariant floor)* | `exp_et5_flow_clean` |
+| 41..44  | `et5-clean-{fedavg,fedmedian,fedyogi,fedprox}`            | none (pristine FL flow, same fast cadence) | `exp_et5_flow_clean` |
+| 45..48  | `et5-loss20-*`                                            | packet loss 0.2                     | `exp_et5_flow_loss20` |
+| 49..52  | `et5-loss40-*`                                            | packet loss 0.4                     | `exp_et5_flow_loss40` |
+| 53..56  | `et5-loss60-*`                                            | packet loss 0.6                     | `exp_et5_flow_loss60` |
+| 57..60  | `et5-delay1500-*`                                         | delay 1.5 s / jitter 375 ms         | `exp_et5_flow_delay1500` |
+| 61..64  | `et5-delay4000-*`                                         | delay 4 s / jitter 1 s              | `exp_et5_flow_delay4000` |
+| 65..68  | `et5-delay8000-*`                                         | delay 8 s / jitter 2 s              | `exp_et5_flow_delay8000` |
+| 69..72  | `et5-combo-lo-*`                                          | loss 0.2 + delay 1.5 s / 375 ms     | `exp_et5_flow_combo_lo` |
+| 73..76  | `et5-combo-hi-*`                                          | loss 0.6 + delay 8 s / 2 s          | `exp_et5_flow_combo_hi` |
+
+Each FL cell applies the aggregation-strategy profile **first** and the level file
+**last** (`override=(strategy, level)`), so the level file's fast cadence and
+FL-flow network settings win while the strategy file still supplies
+`aggregation_strategy` and its hyper-parameters (this is the reverse of ET4's
+`(level, strategy)` order — fine, because ET4's level files never touch the
+cadence). The no-FL floor is a single cell, not one per level, because without FL
+the FL-flow impairment has no effect. Read the whole block off W&B by grouping on
+run name: for each condition, the four strategy curves show which one holds
+robustness/accuracy up best as the flow degrades.
 
 `--arch {mlp,cnn,resnet,all}` merges the `cnn`/`resnet` override on top (mlp is
 the default) and suffixes the W&B run/group names (`-cnn`, `-resnet`), exactly as

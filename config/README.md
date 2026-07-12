@@ -263,3 +263,103 @@ curl -X POST http://localhost:5000/configure \
 5. **Monitoring**: Built-in health checks and status endpoints
 6. **Scalability**: Easy to manage multiple producers
 7. **Debugging**: Better error messages and logging
+
+---
+
+## Network-impairment knobs (packet loss + delay)
+
+Three flows in the platform can be independently degraded to study robustness to
+a lossy/slow network. Each flow reads three keys — `packet_loss_rate`
+(Bernoulli drop probability, `[0,1]`), `delay_mean_ms` and `jitter_std_ms`
+(added latency `max(0, delay_mean_ms + N(0, jitter_std_ms))`). Impairment is
+applied **client-side, on the sending node**, because neither Kafka nor the
+offline in-process bus ever drops or delays an accepted write. The same keys
+behave identically in the Dockerised platform (`OpenFAIR/packet_loss.py` +
+`network_delay.py`) and in `offline_simulation/` (`packet_loss.py` +
+`network_delay.py`).
+
+| Flow | Config section | Applies to | Excluded (never impaired) |
+|------|----------------|------------|----------------------------|
+| producer → consumer **telemetry** | `default_vehicle_config.*` (+ per-vehicle override) | `{v}_anomalies`, `{v}_eval_anomalies`, `{v}_normal_data` | health probes, anything W&B-bound |
+| consumer → FL-manager **weights uplink** | `default_consumer_config.*` (+ per-vehicle override) | `{v}_weights` | `{v}_statistics` (W&B-bound) |
+| FL-manager → consumers **global-weights downlink** | `federated_learning.*` | `global_weights` | `global_metrics` (W&B-bound) |
+
+Because a per-vehicle override under `vehicles:` merges into **both** the
+producer and the consumer config, degrading **only** the FL flow (and leaving
+telemetry pristine) is done by setting the *section* defaults rather than
+per-vehicle keys: zero out `default_vehicle_config.{packet_loss_rate,
+delay_mean_ms, jitter_std_ms}`, set the impairment on
+`default_consumer_config.*` (uplink) and `federated_learning.*` (downlink), and
+leave the per-vehicle blocks carrying only `Mp_std`/`Bp_std`. This is exactly
+what the ET5 override files do.
+
+## Experiment overrides & the ET5 FL-flow-stress block
+
+`config/overrides/*.yaml` are partial files merged on top of `default.yaml`
+(Hydra/OmegaConf semantics: maps deep-merge, lists — like `vehicles:` — are
+replaced wholesale). The experiment campaign is defined in
+`tests/experiments.py` (Dockerised) and `offline_simulation/experiments.py`
+(in-process twin), which merge these files in a fixed order. See either file's
+docstring for the full matrix (Block A/B canonical, Block C = ET4, Block D = ET5).
+
+The **ET5 block** (`config/overrides/exp_et5_flow_*.yaml`) answers *"which
+aggregation strategy best tolerates a degraded FL flow?"*. Unlike ET4 (a single
+network free-rider), ET5 has **no free rider**: all four vehicles are identical
+(clean config, no adversarial training) and the impairment is applied
+**uniformly to the whole fleet and to the FL coordinator**, on the FL flow only
+(weights uplink + global-weights downlink), with telemetry held pristine. Each
+cell crosses a network condition with an aggregation strategy
+(FedAvg/FedMedian/FedYogi/FedProx); the runner applies the strategy profile
+first and the `exp_et5_flow_*` level file last, so the level's settings win while
+the strategy still supplies `aggregation_strategy` and its hyper-parameters.
+
+### ET5 calibration
+
+The ET5 levels were **calibrated in `offline_simulation`** (no Docker needed) so
+the impairment produces a smooth, meaningful signal rather than noise. Two
+findings drove the numbers, both a consequence of the FL flow being **low
+frequency** (one weight push per vehicle per push-interval) unlike the
+high-frequency telemetry path:
+
+1. **Cadence.** At the platform default (`weights_push_freq_seconds: 120`,
+   `aggregation_interval_secs: 20`) a 10-minute run produces only ~5 weight
+   pushes per vehicle — a calibration run of 90 s produced **zero** pushes and
+   **zero** FL rounds. Packet loss is then statistically coarse (dropping 20 % of
+   5 pushes is 1 push) and any sub-second delay is negligible against a 120 s
+   interval. ET5 therefore runs a **fast FL cadence — push/pull every 15 s,
+   aggregate every 5 s** — which exercises the flow ~40×/run; a 150 s calibration
+   run then showed ~10 pushes/vehicle and clean, proportional drops
+   (`weights->FL = 3/10, 4/10, …` at loss 0.4; `rounds=5 packet_loss=2/5` on the
+   downlink). The effective aggregation cadence is gated by the push interval
+   (weights only refresh every 15 s), so 15 s is the binding knob.
+2. **Delay scale.** Because pushes are 15 s apart, delay must be a **meaningful
+   fraction of that interval** to change aggregation staleness/ordering. A few
+   hundred ms (ET4's telemetry-path magnitudes) is a no-op here, so ET5 uses
+   **1.5 s / 4 s / 8 s** (≈ 0.1× / 0.27× / 0.53× of the push interval, with jitter
+   at 25 % of the mean). At 8 s, weights routinely land more than half an interval
+   late and jitter reorders them across rounds.
+
+A calibration run also confirmed the flow is cleanly isolated
+(`packet_loss[telemetry] = 0/37256`, `delay[telemetry] ~0 ms` while the weights
+path is degraded) and that **automatic attacks must be on** for training to
+progress: a consumer only forms a training batch when its NORMAL, ANOMALY **and**
+ATTACK buffers are all full, so `--no-attacks` leaves the attack buffer empty and
+no epoch ever completes.
+
+| Level file | uplink+downlink loss | uplink+downlink delay / jitter |
+|------------|----------------------|--------------------------------|
+| `exp_et5_flow_clean`     | 0.0 | 0 / 0 (reference, same fast cadence) |
+| `exp_et5_flow_loss20`    | 0.2 | 0 / 0 |
+| `exp_et5_flow_loss40`    | 0.4 | 0 / 0 |
+| `exp_et5_flow_loss60`    | 0.6 | 0 / 0 |
+| `exp_et5_flow_delay1500` | 0.0 | 1500 ms / 375 ms |
+| `exp_et5_flow_delay4000` | 0.0 | 4000 ms / 1000 ms |
+| `exp_et5_flow_delay8000` | 0.0 | 8000 ms / 2000 ms |
+| `exp_et5_flow_combo_lo`  | 0.2 | 1500 ms / 375 ms |
+| `exp_et5_flow_combo_hi`  | 0.6 | 8000 ms / 2000 ms |
+
+Run the block (offline, no Docker) with:
+
+```bash
+python -m offline_simulation.experiments --experiments $(seq 40 76)
+```

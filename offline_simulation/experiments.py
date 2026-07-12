@@ -54,6 +54,20 @@ cross-condition comparisons are unconfounded.
         20..23 et4-delay100-*  24..27 et4-delay250-*  28..31 et4-delay500-*
         32..35 et4-combo-lo-*  36..39 et4-combo-hi-*
 
+  Block D — ET5 (which FL strategy best tolerates a degraded FL FLOW?), ids 40..76:
+    NO free rider — all four vehicles are identical (clean config, no adversarial
+    training) and the impairment is applied UNIFORMLY to the whole fleet AND the
+    FL coordinator. Only the FL flow is degraded (consumer->FL weights uplink +
+    FL->consumer global_weights downlink); the producer->consumer telemetry stays
+    pristine. Calibrated fast FL cadence (push/pull 15s, aggregate 5s) and
+    delay magnitudes scaled to it (1.5/4/8 s), so both loss and delay bite. The
+    block is a network-invariant no-FL floor (id 40) plus 9 FL-flow conditions x
+    4 strategies (FedAvg/FedMedian/FedYogi/FedProx) = 37 cells:
+        40     et5-flow-nofl-floor      (network-invariant reference)
+        41..44 et5-clean-*      45..48 et5-loss20-*     49..52 et5-loss40-*
+        53..56 et5-loss60-*     57..60 et5-delay1500-*  61..64 et5-delay4000-*
+        65..68 et5-delay8000-*  69..72 et5-combo-lo-*   73..76 et5-combo-hi-*
+
 Run each across the three architectures (``--arch mlp|cnn|resnet|all``), which
 merges the ``cnn`` / ``resnet`` config override on top (mlp is the default, no
 extra override). W&B group / run names get an architecture suffix so results
@@ -75,11 +89,15 @@ Startup order (per run) — mirrors tests/experiments.py exactly
 
 Typical usage
 -------------
-  # All 39 experiments (7 canonical + 32 ET4, MLP), 3 seeds each, W&B offline
+  # All 76 experiments (7 canonical + 32 ET4 + 37 ET5, MLP), 3 seeds each, W&B offline
   python -m offline_simulation.experiments
 
   # Just the ET4 network-free-rider block (ids 8..39), every architecture
   python -m offline_simulation.experiments --arch all --experiments $(seq 8 39)
+
+  # The ET5 FL-flow-stress block (ids 40..76): which strategy tolerates a
+  # lossy/slow FL flow best, with an identical fleet and no free rider?
+  python -m offline_simulation.experiments --experiments $(seq 40 76)
 
   # A quick smoke run: one experiment, one seed, 60 s
   python -m offline_simulation.experiments --experiments 1 --seeds 42 \
@@ -243,6 +261,101 @@ def _extend_with_et4(experiments: dict[int, dict]) -> None:
 
 
 _extend_with_et4(EXPERIMENTS)
+
+
+# ---------------------------------------------------------------------------
+# Block D — ET5 (which FL strategy best tolerates a degraded FL flow?) — ids 40..76
+# ---------------------------------------------------------------------------
+# Kept in step (by hand) with the identical block in tests/experiments.py.
+#
+# ET5 asks a different question from ET4. ET4 impaired ONE vehicle's uplink (a
+# network free-rider) and asked whether FL rescues it. ET5 has NO free rider:
+# all four vehicles are identical (same clean config, no adversarial training)
+# and the impairment is applied UNIFORMLY to the whole fleet AND to the FL
+# coordinator, so the question becomes "which aggregation strategy degrades most
+# gracefully as the FL flow itself gets lossy/slow?".
+#
+# The ONLY degraded path is the FL flow:
+#   * consumer -> FL manager  weights UPLINK    (default_consumer_config.*)
+#   * FL manager -> consumers global_weights DOWNLINK (federated_learning.*)
+# The producer -> consumer telemetry pipeline is held PRISTINE (0 loss / 0
+# delay), so local training data is never starved — only the aggregation
+# transport is stressed. Everyone shares the ET3/ET4 decoupled eval (HSJA clean
+# anchors + fixed sigma-grid), so ET5 numbers line up with the rest.
+#
+# Two calibrated design choices (see config/README.md, "ET5 calibration", and
+# the header of any config/overrides/exp_et5_flow_*.yaml):
+#   1. FAST FL cadence (push/pull 15s, aggregate 5s) instead of the platform
+#      default 120s/20s — at the default cadence a 10-min run yields only a
+#      handful of pushes, so packet loss is statistically coarse and ms-scale
+#      delay is a no-op against a 120s interval. The fast cadence exercises the
+#      flow ~40x/run.
+#   2. DELAY magnitudes scaled to that 15s interval (1.5s / 4s / 8s), because a
+#      few hundred ms — meaningful on ET4's high-frequency *telemetry* path — is
+#      negligible on the low-frequency FL *weights* path.
+#
+# The block is a single network-invariant no-FL floor plus the cross-product of
+# 9 FL-flow conditions x 4 aggregation strategies (FedAvg / FedMedian / FedYogi /
+# FedProx) = 1 + 36 = 37 experiments (ids 40..76), runnable across
+# --arch mlp|cnn|resnet|all.
+
+# (short_tag, level override profile, human description of the FL-flow condition)
+_ET5_LEVELS: list[tuple[str, str, str]] = [
+    ("clean",     "exp_et5_flow_clean",     "pristine FL flow (reference)"),
+    ("loss20",    "exp_et5_flow_loss20",    "packet loss 0.2"),
+    ("loss40",    "exp_et5_flow_loss40",    "packet loss 0.4"),
+    ("loss60",    "exp_et5_flow_loss60",    "packet loss 0.6"),
+    ("delay1500", "exp_et5_flow_delay1500", "delay 1500ms / jitter 375ms"),
+    ("delay4000", "exp_et5_flow_delay4000", "delay 4000ms / jitter 1000ms"),
+    ("delay8000", "exp_et5_flow_delay8000", "delay 8000ms / jitter 2000ms"),
+    ("combo-lo",  "exp_et5_flow_combo_lo",  "packet loss 0.2 + delay 1500ms/375ms"),
+    ("combo-hi",  "exp_et5_flow_combo_hi",  "packet loss 0.6 + delay 8000ms/2000ms"),
+]
+
+# (mode_tag, aggregation-strategy override). Applied BEFORE the level profile so
+# the level file's fast cadence + FL-flow network settings win, while the
+# strategy file still supplies aggregation_strategy and its hyper-parameters.
+_ET5_MODES: list[tuple[str, str]] = [
+    ("fedavg",    "fedavg"),
+    ("fedmedian", "fedmedian"),
+    ("fedyogi",   "fedyogi"),
+    ("fedprox",   "fedprox"),
+]
+
+
+def _extend_with_et5(experiments: dict[int, dict]) -> None:
+    """Append the 37-cell ET5 FL-flow-stress block to *experiments* in place."""
+    next_id = max(experiments) + 1
+    # One network-invariant no-FL floor: four identical clean local learners with
+    # no aggregation. Without FL the FL-flow impairment has no effect, so this is
+    # a single reference cell (not one per level) — it answers "what does each
+    # vehicle reach alone?", the floor every FL cell is measured against.
+    experiments[next_id] = {
+        "name": "et5-flow-nofl-floor",
+        "fl": False,
+        "override": "exp_et5_flow_clean",
+        "description": (
+            "ET5 floor: four identical clean vehicles, NO FL (no aggregation). "
+            "Network-invariant reference for the FL-flow stress block."
+        ),
+    }
+    next_id += 1
+    for level_tag, level_profile, level_desc in _ET5_LEVELS:
+        for mode_tag, strategy in _ET5_MODES:
+            experiments[next_id] = {
+                "name": f"et5-{level_tag}-{mode_tag}",
+                "fl": True,
+                # Strategy FIRST, level LAST (level's cadence + network win).
+                "override": (strategy, level_profile),
+                "description": (
+                    f"ET5 FL-flow stress (uniform fleet, no free rider): "
+                    f"{level_desc}. FL ({mode_tag.upper()})."
+                ),
+            }
+            next_id += 1
+
+
+_extend_with_et5(EXPERIMENTS)
 
 
 # ---------------------------------------------------------------------------
@@ -420,7 +533,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--experiments", nargs="+", type=int, choices=list(EXPERIMENTS),
                    default=list(EXPERIMENTS), metavar="N",
-                   help="Experiment numbers to run (default: all; 1..7 canonical + 8..39 ET4).")
+                   help="Experiment numbers to run (default: all; 1..7 canonical + "
+                        "8..39 ET4 + 40..76 ET5).")
     p.add_argument("--seeds", nargs="+", type=int, default=DEFAULT_SEEDS, metavar="S",
                    help=f"Random seeds — one independent run per seed (default: {DEFAULT_SEEDS}).")
     p.add_argument("--arch", nargs="+", choices=["mlp", "cnn", "resnet", "all"],

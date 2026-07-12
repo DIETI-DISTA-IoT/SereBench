@@ -1,0 +1,81 @@
+# ET5 — "FL-flow network stress" block (Block D).
+#
+# Question: which federated aggregation strategy tolerates a DEGRADED
+# FEDERATED-LEARNING FLOW best? Unlike ET4 (a single network free-rider), ET5
+# has NO free rider: all four vehicles are identical (same clean config, no
+# adversarial training) and the impairment is applied UNIFORMLY to the whole
+# fleet AND to the FL coordinator. The ONLY degraded path is the FL flow itself:
+#   * consumer -> FL manager   weights UPLINK    (default_consumer_config.*)
+#   * FL manager -> consumers  global_weights DOWNLINK (federated_learning.*)
+# The producer -> consumer telemetry pipeline is kept PRISTINE (0 loss / 0
+# delay) so local training data is never starved — the aggregation transport is
+# the only thing under stress. Everyone shares the ET3/ET4 decoupled eval (HSJA
+# on clean anchors + a fixed Gaussian sigma-grid) so ET5 numbers line up with
+# the rest of the campaign.
+#
+# Cadence: ET5 runs the FL flow on a FAST cadence (push/pull every 15 s,
+# aggregate every 5 s) instead of the platform default (120 s / 20 s). This is a
+# CALIBRATED choice (see config/README.md, "ET5 calibration"): at the default
+# cadence a normal-length run yields only a handful of weight pushes, so packet
+# loss is statistically coarse and a sub-second delay is negligible against a
+# 120 s push interval. The fast cadence exercises the flow ~40 times per 10-min
+# run, so both loss and (seconds-scale) delay produce a smooth, meaningful
+# degradation. The delay magnitudes are therefore scaled to the 15 s push
+# interval (a few 100 ms would be a no-op here, unlike on ET4's high-frequency
+# telemetry path).
+#
+# IMPORTANT — override ORDER: ET5 cells apply the aggregation-strategy profile
+# FIRST and this level file LAST (the runners use override=(strategy, level)),
+# so this file's cadence + network settings are the last word while the strategy
+# file still supplies aggregation_strategy and its hyper-parameters (FedYogi's
+# server LR / moments, FedProx's mu, ...).
+#
+# This file's impairment: packet loss 0.6 + delay 8000 ms / jitter 2000 ms on the FL flow.
+
+default_vehicle_config:
+  # Pristine producer -> consumer telemetry for the whole fleet: in ET5 the FL
+  # flow is the only thing under stress, so local training data is never lost or
+  # delayed.
+  packet_loss_rate: 0.0
+  delay_mean_ms: 0.0
+  jitter_std_ms: 0.0
+  adversarial_training: False
+
+default_consumer_config:
+  # consumer -> FL manager weights UPLINK impairment (identical for all four
+  # vehicles — no free rider).
+  packet_loss_rate: 0.6
+  delay_mean_ms: 8000.0
+  jitter_std_ms: 2000.0
+  # Fast FL cadence (see header) — overrides the strategy file's 120 s.
+  weights_push_freq_seconds: 15
+  weights_pull_freq_seconds: 15
+  # Identical decoupled eval target as ET3/ET4, so ET5 results are comparable.
+  hsja_clean_anchors: true
+  eval_sigmas: [0.5, 1.0, 1.5, 2.0]
+
+federated_learning:
+  # FL manager -> consumers global_weights DOWNLINK impairment (the coordinator
+  # itself is degraded too, exactly as the experiment asks).
+  packet_loss_rate: 0.6
+  delay_mean_ms: 8000.0
+  jitter_std_ms: 2000.0
+  # Fast aggregation cadence (see header) — overrides the strategy file's 20 s.
+  aggregation_interval_secs: 5
+
+vehicles:
+  # No free rider: four identical vehicles, clean training, and NO per-vehicle
+  # network override — so the uplink stays governed by default_consumer_config
+  # and the telemetry by default_vehicle_config, and nothing re-couples them.
+  - angela:
+      Mp_std: 0
+      Bp_std: 0
+  - bob:
+      Mp_std: 0
+      Bp_std: 0
+  - claude:
+      Mp_std: 0
+      Bp_std: 0
+  - daniel:
+      Mp_std: 0
+      Bp_std: 0
