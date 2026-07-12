@@ -62,6 +62,25 @@ def encode_array(arr):
     return {"data": arr.tobytes().hex(), "shape": arr.shape, "dtype": str(arr.dtype)}
 
 
+def _sample_with_anchor_fallback(primary_buffer, anchor_buffer, n):
+    """Sample up to n items from primary_buffer, topping up from anchor_buffer
+    when primary_buffer is short. Port of consume.py's helper of the same name.
+
+    A no-op whenever primary_buffer already holds >= n items (every existing
+    experiment), since the top-up only fires on the shortfall.
+    """
+    feats, labels = primary_buffer.sample(n)
+    have = len(feats)
+    if have >= n:
+        return feats, labels
+    extra_feats, extra_labels = anchor_buffer.sample(n - have)
+    if len(extra_feats) == 0:
+        return feats, labels
+    if have == 0:
+        return extra_feats, extra_labels
+    return torch.vstack((feats, extra_feats)), torch.vstack((labels, extra_labels))
+
+
 class ConsumerNode:
     def __init__(self, vehicle_name, config, bus, get_status, stop_attack):
         self.vehicle_name = vehicle_name
@@ -108,6 +127,13 @@ class ConsumerNode:
         self.anomalies_buffer = Buffer(buffer_size)
         self.eval_anomalies_buffer = Buffer(buffer_size)
         self.diagnostics_buffer = Buffer(buffer_size)
+        # Decoupled, always-balanced eval-anchor buffers (see _process_message's
+        # "_eval_anchors" branch and ProducerNode._thread_eval_anchors) — a
+        # fallback sample source for the robustness evals below when a class's
+        # live buffer is deliberately starved by a class-imbalance experiment.
+        self.anchor_diagnostics_buffer = Buffer(buffer_size)
+        self.anchor_anomalies_buffer = Buffer(buffer_size)
+        self.anchor_attacks_buffer = Buffer(buffer_size)
 
         # Counters / accumulators (globals in consume.py).
         self.batch_counter = 0
@@ -207,6 +233,7 @@ class ConsumerNode:
         consumer.subscribe([
             f"{self.vehicle_name}_anomalies",
             f"{self.vehicle_name}_eval_anomalies",
+            f"{self.vehicle_name}_eval_anchors",
             f"{self.vehicle_name}_normal_data",
         ])
         try:
@@ -239,7 +266,25 @@ class ConsumerNode:
                 f"[sigma-grid] captured {len(self.FEATURE_COLUMNS)} feature columns; "
                 f"pressure indices -> {self.PRESSURE_INDICES}")
 
-        if topic.endswith("_eval_anomalies"):
+        if topic.endswith("_eval_anchors"):
+            # Decoupled, class-balanced eval-anchor stream (see
+            # ProducerNode._thread_eval_anchors) — never subject to
+            # mu_normal/mu_anomalies throttling, so these buffers stay a
+            # reliable fallback anchor source for sigma-grid/HSJA evals even
+            # when the live buffers below are deliberately starved for a
+            # class-imbalance experiment. Not counted into records_processed
+            # / online classification (it isn't live telemetry).
+            if msg['event_type'] == EventType.NORMAL.value:
+                feat, label = self.anchor_diagnostics_buffer.format(msg)
+                self.anchor_diagnostics_buffer.add(feat, label)
+            elif msg['event_type'] == EventType.ANOMALY.value:
+                feat, label = self.anchor_anomalies_buffer.format(msg)
+                self.anchor_anomalies_buffer.add(feat, label)
+            elif msg['event_type'] == EventType.ATTACK.value:
+                feat, label = self.anchor_attacks_buffer.format(msg)
+                self.anchor_attacks_buffer.add(feat, label)
+
+        elif topic.endswith("_eval_anomalies"):
             if msg['event_type'] == EventType.ANOMALY.value:
                 feat, label = self.eval_anomalies_buffer.format(msg)
                 self.eval_anomalies_buffer.add(feat, label)
@@ -374,9 +419,12 @@ class ConsumerNode:
 
     def _sigma_grid_evaluation(self, sigmas, n=300):
         per_class = max(n // 3, 1)
-        diag_feats, diag_labels = self.diagnostics_buffer.sample(per_class)
-        anom_feats, anom_labels = self.anomalies_buffer.sample(per_class)
-        atk_feats, atk_labels = self.attacks_buffer.sample(per_class)
+        diag_feats, diag_labels = _sample_with_anchor_fallback(
+            self.diagnostics_buffer, self.anchor_diagnostics_buffer, per_class)
+        anom_feats, anom_labels = _sample_with_anchor_fallback(
+            self.anomalies_buffer, self.anchor_anomalies_buffer, per_class)
+        atk_feats, atk_labels = _sample_with_anchor_fallback(
+            self.attacks_buffer, self.anchor_attacks_buffer, per_class)
 
         if len(diag_feats) < 10 or len(anom_feats) < 10 or len(atk_feats) < 10:
             return None
@@ -407,12 +455,21 @@ class ConsumerNode:
 
     def _hsja_evaluation(self, n_per_class, n_steps, n_grad_samples, include_plots,
                          feature_indices, clean_anchors, init_noise_scale):
-        anom_buf = self.anomalies_buffer if clean_anchors else self.eval_anomalies_buffer
-        atk_buf = self.attacks_buffer if clean_anchors else self.eval_attacks_buffer
-
-        diag_feats, diag_labels = self.diagnostics_buffer.sample(n_per_class)
-        anom_feats, anom_labels = anom_buf.sample(n_per_class)
-        atk_feats, atk_labels = atk_buf.sample(n_per_class)
+        # The anchor-buffer fallback only applies on the clean_anchors=True
+        # path: the anchor stream is itself clean (no Mp_std/Bp_std noise),
+        # so it is not a valid substitute for the legacy noisy eval_* buffers
+        # used when clean_anchors=False.
+        if clean_anchors:
+            diag_feats, diag_labels = _sample_with_anchor_fallback(
+                self.diagnostics_buffer, self.anchor_diagnostics_buffer, n_per_class)
+            anom_feats, anom_labels = _sample_with_anchor_fallback(
+                self.anomalies_buffer, self.anchor_anomalies_buffer, n_per_class)
+            atk_feats, atk_labels = _sample_with_anchor_fallback(
+                self.attacks_buffer, self.anchor_attacks_buffer, n_per_class)
+        else:
+            diag_feats, diag_labels = self.diagnostics_buffer.sample(n_per_class)
+            anom_feats, anom_labels = self.eval_anomalies_buffer.sample(n_per_class)
+            atk_feats, atk_labels = self.eval_attacks_buffer.sample(n_per_class)
 
         if len(diag_feats) < 5 or len(anom_feats) < 5 or len(atk_feats) < 5:
             self.logger.warning("HSJA eval OMITTED — buffers not warm enough.")

@@ -1,0 +1,99 @@
+# ET4 — "Angela class-imbalance free-rider" block (Block C, imbalance sub-axis).
+#
+# Goal: isolate whether federated learning helps a single node whose local
+# DATA is imbalanced — scarce ANOMALY+ATTACK ("abnormal") telemetry relative
+# to NORMAL — while its peers see a balanced stream. This is the class-
+# imbalance analogue of the ET3 clean free-rider (training axis) and the ET4
+# network free-rider (uplink-health axis): here the only disadvantage angela
+# carries is a throttled anomaly/attack generation rate on her OWN producer.
+# bob/claude/daniel keep the default, balanced mu_normal/mu_anomalies rates.
+#
+# Mechanism: the producer's anomaly/attack thread sleeps a lognormal duration
+# (mean = mu_anomalies * alpha) between messages, so raising mu_anomalies
+# lengthens that sleep and starves the ANOMALY+ATTACK arrival rate. Because
+# the consumer trains on a class-balanced batch drawn independently from each
+# of the three per-class buffers (and refuses to train at all until every
+# buffer has a full batch), what this throttling actually does is: reduce the
+# distinct-sample diversity available for angela's ANOMALY/ATTACK buffers
+# (mild/moderate), and — at the severe/extreme levels — starve those buffers
+# below batch_size so angela's local model effectively never learns to
+# recognise anomalies/attacks on its own, and can only gain that knowledge
+# through FL aggregation. See offline_simulation/experiments.py and
+# tests/experiments.py for the calibration behind these multipliers (Monte-
+# Carlo simulated expected sample counts over a 600s run at each level).
+#
+# What differs across the 4 levels (mild/moderate/severe/extreme) of THIS
+# sub-axis is ONLY angela's mu_anomalies. Held identical everywhere:
+#   - training: clean for all four vehicles (adversarial_training=False);
+#   - network: pristine for everyone (no packet loss / delay / jitter), so the
+#     imbalance benefit under test is never confounded with the network ET4
+#     axis;
+#   - FL downlink: pristine (federated_learning packet_loss_rate/delay all 0);
+#   - evaluation: the same decoupled target as ET3/network-ET4 (HSJA on clean
+#     anchors + a fixed Gaussian sigma-grid). The consumer's per-class anchor
+#     fallback (eval_anchor_interval_secs, decoupled from mu_anomalies/
+#     mu_normal) keeps this evaluation class-balanced and reporting even at
+#     the severe/extreme levels, where angela's live buffers alone would be
+#     too thin.
+#
+# THIS FILE — mild level: mu_anomalies x20 (baseline 0.157 -> 3.14). Monte-
+# Carlo expected count over a 600s run: ~635 ANOMALY+ATTACK samples (vs.
+# ~12,600 at baseline) — noticeably reduced diversity, buffer still fills.
+
+default_vehicle_config:
+  # Pristine baseline for the whole fleet; angela is bumped up below. Peers
+  # inherit these values (no override).
+  mu_anomalies: 0.157
+  mu_normal: 0.117
+  packet_loss_rate: 0.0
+  delay_mean_ms: 0.0
+  jitter_std_ms: 0.0
+  adversarial_training: False
+
+federated_learning:
+  # Keep the FL coordinator's global_weights downlink perfect: the experiment
+  # asks whether FL *helps* angela, so its delivery must not be impaired too.
+  packet_loss_rate: 0.0
+  delay_mean_ms: 0.0
+  jitter_std_ms: 0.0
+
+default_consumer_config:
+  # Identical decoupled eval target for every vehicle (as in exp_et3_freerider
+  # / the network-ET4 overrides), so this sub-axis's robustness numbers line
+  # up with the rest of the ET3/ET4 campaign.
+  hsja_clean_anchors: true
+  eval_sigmas: [0.5, 1.0, 1.5, 2.0]
+
+vehicles:
+  - angela:
+      Mp_std: 0
+      Bp_std: 0
+      mu_anomalies: 3.14
+      mu_normal: 0.117
+      packet_loss_rate: 0.0
+      delay_mean_ms: 0.0
+      jitter_std_ms: 0.0
+  - bob:
+      Mp_std: 0
+      Bp_std: 0
+      mu_anomalies: 0.157
+      mu_normal: 0.117
+      packet_loss_rate: 0.0
+      delay_mean_ms: 0.0
+      jitter_std_ms: 0.0
+  - claude:
+      Mp_std: 0
+      Bp_std: 0
+      mu_anomalies: 0.157
+      mu_normal: 0.117
+      packet_loss_rate: 0.0
+      delay_mean_ms: 0.0
+      jitter_std_ms: 0.0
+  - daniel:
+      Mp_std: 0
+      Bp_std: 0
+      mu_anomalies: 0.157
+      mu_normal: 0.117
+      packet_loss_rate: 0.0
+      delay_mean_ms: 0.0
+      jitter_std_ms: 0.0

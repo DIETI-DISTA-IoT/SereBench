@@ -54,6 +54,23 @@ cross-condition comparisons are unconfounded.
         20..23 et4-delay100-*  24..27 et4-delay250-*  28..31 et4-delay500-*
         32..35 et4-combo-lo-*  36..39 et4-combo-hi-*
 
+  Block C — ET4, class-imbalance sub-axis (does FL help a vehicle whose OWN
+  data is class-imbalanced?), ids 40..71:
+    Sibling block to the network-impairment one above (added alongside it, not
+    replacing it). Angela's producer generation rate for one class is
+    throttled — mu_anomalies ("abnormalscarce", starves ANOMALY+ATTACK) or
+    mu_normal ("normalscarce", starves NORMAL) — while bob/claude/daniel keep
+    the default, balanced rates. Everyone trains clean and shares the same
+    decoupled eval as ET3/network-ET4; the consumer's eval-anchor fallback
+    (default_vehicle_config.eval_anchor_interval_secs) keeps that eval
+    reporting even once angela's own buffers run thin. 8 imbalance levels (4
+    abnormalscarce + 4 normalscarce, each mild/moderate/severe/extreme) x the
+    same 4 FL modes = 32 experiments:
+        40..43 et4-abnormalscarce-mild-*      44..47 et4-abnormalscarce-moderate-*
+        48..51 et4-abnormalscarce-severe-*    52..55 et4-abnormalscarce-extreme-*
+        56..59 et4-normalscarce-mild-*        60..63 et4-normalscarce-moderate-*
+        64..67 et4-normalscarce-severe-*      68..71 et4-normalscarce-extreme-*
+
 Run each across the three architectures (``--arch mlp|cnn|resnet|all``), which
 merges the ``cnn`` / ``resnet`` config override on top (mlp is the default, no
 extra override). W&B group / run names get an architecture suffix so results
@@ -75,11 +92,15 @@ Startup order (per run) — mirrors tests/experiments.py exactly
 
 Typical usage
 -------------
-  # All 39 experiments (7 canonical + 32 ET4, MLP), 3 seeds each, W&B offline
+  # All 71 experiments (7 canonical + 32 network-ET4 + 32 imbalance-ET4, MLP),
+  # 3 seeds each, W&B offline
   python -m offline_simulation.experiments
 
   # Just the ET4 network-free-rider block (ids 8..39), every architecture
   python -m offline_simulation.experiments --arch all --experiments $(seq 8 39)
+
+  # Just the ET4 class-imbalance free-rider block (ids 40..71)
+  python -m offline_simulation.experiments --experiments $(seq 40 71)
 
   # A quick smoke run: one experiment, one seed, 60 s
   python -m offline_simulation.experiments --experiments 1 --seeds 42 \
@@ -243,6 +264,57 @@ def _extend_with_et4(experiments: dict[int, dict]) -> None:
 
 
 _extend_with_et4(EXPERIMENTS)
+
+
+# ---------------------------------------------------------------------------
+# Block C — ET4, class-imbalance sub-axis — ids 40..71
+# ---------------------------------------------------------------------------
+# Identical block to the one appended in tests/experiments.py (kept in step by
+# hand, exactly as the network-impairment ET4 block above already is). Sibling
+# to that block, added alongside it rather than replacing it. Angela's
+# producer generation rate for one class is throttled via mu_anomalies
+# ("abnormalscarce") or mu_normal ("normalscarce") — offline_simulation's
+# ProducerNode (producer.py) reads these exactly like the Dockerised
+# produce.py — while bob/claude/daniel keep the default, balanced rates.
+# Everyone trains clean and shares the ET3/network-ET4 decoupled eval; the
+# consumer's eval-anchor fallback (buffers fed by ProducerNode's
+# _thread_eval_anchors, decoupled from mu_anomalies/mu_normal) keeps that eval
+# reporting once angela's own buffers run thin. 8 imbalance levels x 4 FL
+# modes = 32 experiments, runnable across --arch mlp|cnn|resnet|all.
+
+# (short_tag, override_profile, human description of angela's imbalance)
+_ET4_IMBALANCE_LEVELS: list[tuple[str, str, str]] = [
+    ("abnormalscarce-mild",     "exp_et4_angela_abnormalscarce_mild",     "mu_anomalies x20"),
+    ("abnormalscarce-moderate", "exp_et4_angela_abnormalscarce_moderate", "mu_anomalies x100"),
+    ("abnormalscarce-severe",   "exp_et4_angela_abnormalscarce_severe",   "mu_anomalies x500"),
+    ("abnormalscarce-extreme",  "exp_et4_angela_abnormalscarce_extreme",  "mu_anomalies x2000"),
+    ("normalscarce-mild",       "exp_et4_angela_normalscarce_mild",       "mu_normal x20"),
+    ("normalscarce-moderate",   "exp_et4_angela_normalscarce_moderate",   "mu_normal x100"),
+    ("normalscarce-severe",     "exp_et4_angela_normalscarce_severe",     "mu_normal x500"),
+    ("normalscarce-extreme",    "exp_et4_angela_normalscarce_extreme",    "mu_normal x2000"),
+]
+
+
+def _extend_with_et4_imbalance(experiments: dict[int, dict]) -> None:
+    """Append the 32-cell ET4 class-imbalance free-rider block to *experiments* in place."""
+    next_id = max(experiments) + 1
+    for level_tag, level_profile, level_desc in _ET4_IMBALANCE_LEVELS:
+        for mode_tag, fl_on, extra in _ET4_MODES:
+            override = level_profile if extra is None else (level_profile, extra)
+            fl_desc = "no FL" if not fl_on else f"FL ({mode_tag[len('fed'):].upper()})"
+            experiments[next_id] = {
+                "name": f"et4-{level_tag}-{mode_tag}",
+                "fl": fl_on,
+                "override": override,
+                "description": (
+                    f"ET4 class-imbalance free-rider: angela {level_desc}, peers "
+                    f"balanced rates. {fl_desc}."
+                ),
+            }
+            next_id += 1
+
+
+_extend_with_et4_imbalance(EXPERIMENTS)
 
 
 # ---------------------------------------------------------------------------
@@ -420,7 +492,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--experiments", nargs="+", type=int, choices=list(EXPERIMENTS),
                    default=list(EXPERIMENTS), metavar="N",
-                   help="Experiment numbers to run (default: all; 1..7 canonical + 8..39 ET4).")
+                   help="Experiment numbers to run (default: all; 1..7 canonical + 8..39 network-ET4 + 40..71 imbalance-ET4).")
     p.add_argument("--seeds", nargs="+", type=int, default=DEFAULT_SEEDS, metavar="S",
                    help=f"Random seeds — one independent run per seed (default: {DEFAULT_SEEDS}).")
     p.add_argument("--arch", nargs="+", choices=["mlp", "cnn", "resnet", "all"],

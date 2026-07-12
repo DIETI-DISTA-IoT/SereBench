@@ -76,13 +76,20 @@ class ProducerNode:
         # lognorm(s=sigma, scale=exp(mu)) == numpy lognormal(mean=mu, sigma)).
         self._dur_rng = np.random.default_rng(None if seed is None else seed + 100)
 
-        # Build the two Train simulators exactly like start_producer_threads.
+        # Build the three Train simulators exactly like start_producer_threads.
         ns_main = types.SimpleNamespace(**config)
         ns_eval = types.SimpleNamespace(**config)
+        ns_anchor = types.SimpleNamespace(**config)
         if seed is not None:
             ns_eval.seed = seed + 1
+            ns_anchor.seed = seed + 2
         self.virtual_train = Train(ns_main)
         self.eval_virtual_train = Train(ns_eval)
+        # Dedicated Train for the eval-anchor stream (see _thread_eval_anchors)
+        # — kept separate from eval_virtual_train so the two threads never race
+        # on the same mutable Train/RNG state.
+        self.anchor_virtual_train = Train(ns_anchor)
+        self.eval_anchor_interval_secs = float(config.get('eval_anchor_interval_secs', 2.0))
         eval_mp = config.get('eval_Mp_std', None)
         eval_bp = config.get('eval_Bp_std', None)
         if eval_mp is not None:
@@ -107,12 +114,15 @@ class ProducerNode:
         self._stop = False
         self.bus.create_topic(f"{self.vehicle_name}_anomalies")
         self.bus.create_topic(f"{self.vehicle_name}_eval_anomalies")
+        self.bus.create_topic(f"{self.vehicle_name}_eval_anchors")
         self.bus.create_topic(f"{self.vehicle_name}_normal_data")
         self._threads = [
             threading.Thread(target=self._thread_anomalie, daemon=True,
                              name=f"{self.vehicle_name}_anom"),
             threading.Thread(target=self._thread_normali, daemon=True,
                              name=f"{self.vehicle_name}_norm"),
+            threading.Thread(target=self._thread_eval_anchors, daemon=True,
+                             name=f"{self.vehicle_name}_anchor"),
         ]
         for t in self._threads:
             t.start()
@@ -202,6 +212,35 @@ class ProducerNode:
             self.produced_diagnostics += 1
             if self.time_emulation:
                 time.sleep(durata)
+
+    def _thread_eval_anchors(self):
+        """Independent, fixed-cadence, class-balanced trickle of CLEAN eval anchors.
+
+        Round-robins NORMAL/ANOMALY/ATTACK on its own timer
+        (eval_anchor_interval_secs), using anchor_virtual_train, entirely
+        decoupled from mu_normal/mu_anomalies/the attack-infection schedule.
+        Generated with adversarial=False because it backstops the CLEAN
+        per-class buffers that ConsumerNode's sigma-grid and HSJA
+        (clean_anchors=True) evals read from — not the adversarial eval_*
+        buffers. A no-op for every experiment that doesn't induce class
+        scarcity: the consumer only draws from this stream when its live
+        per-class buffers run thin (see
+        config/overrides/exp_et4_angela_abnormalscarce_mild.yaml).
+        """
+        self.logger.info(f"Starting eval-anchor thread for vehicle: {self.vehicle_name}")
+        topic = f"{self.vehicle_name}_eval_anchors"
+        cycle = [EventType.NORMAL, EventType.ANOMALY, EventType.ATTACK]
+        i = 0
+
+        while not self._stop:
+            event = cycle[i % len(cycle)]
+            i += 1
+
+            anchor_sample = self.anchor_virtual_train.step(event, adversarial=False)
+            data = self._add_meta(_round4(anchor_sample), 0.0)
+
+            self._produce(data, topic)
+            time.sleep(self.eval_anchor_interval_secs)
 
     # -- status ------------------------------------------------------------
     def status(self):

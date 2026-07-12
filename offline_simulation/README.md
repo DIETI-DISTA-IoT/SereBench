@@ -138,7 +138,8 @@ CI box.
 pip install -r offline_simulation/requirements.txt
 pip3 install torch --index-url https://download.pytorch.org/whl/cpu   # CPU-only
 
-# All 39 experiments (7 canonical + 32 ET4, MLP), 3 seeds each, W&B offline
+# All 71 experiments (7 canonical + 32 network-ET4 + 32 imbalance-ET4, MLP),
+# 3 seeds each, W&B offline
 python -m offline_simulation.experiments
 
 # Quick smoke: one experiment, one seed, 60 s, fast warmup
@@ -150,6 +151,9 @@ python -m offline_simulation.experiments --arch all --experiments 4 5 6 7
 
 # ET4 network-free-rider block (ids 8..39) across every architecture
 python -m offline_simulation.experiments --arch all --experiments $(seq 8 39)
+
+# ET4 class-imbalance free-rider block (ids 40..71)
+python -m offline_simulation.experiments --experiments $(seq 40 71)
 
 # Continue past failures instead of aborting the batch
 python -m offline_simulation.experiments --skip-on-error
@@ -197,6 +201,53 @@ impaired.
 `--arch {mlp,cnn,resnet,all}` merges the `cnn`/`resnet` override on top (mlp is
 the default) and suffixes the W&B run/group names (`-cnn`, `-resnet`), exactly as
 the per-architecture Dockerised runners do.
+
+**Block C — ET4, class-imbalance sub-axis (does FL help a vehicle whose OWN
+data is class-imbalanced?), ids 40..71.** Sibling to the network-impairment
+block above, added alongside it rather than replacing it. Angela's producer
+generation rate for one class is throttled — `mu_anomalies` ("abnormalscarce",
+starves ANOMALY+ATTACK) or `mu_normal` ("normalscarce", starves NORMAL) — via
+`ProducerNode`'s existing `thread_anomalie`/`thread_normali` lognormal
+inter-arrival model, with no other code involved; bob/claude/daniel keep the
+default, balanced rates. Everyone trains clean and shares the ET3/network-ET4
+decoupled eval. Because the consumer trains on a class-balanced batch drawn
+independently from each per-class buffer (and won't train at all until every
+buffer has a full batch), what the throttling actually does is starve that
+class's buffer diversity (mild/moderate) or block local training on it
+entirely (severe/extreme) — angela can then only gain that knowledge through
+FL aggregation. 8 imbalance levels × the same 4 FL modes:
+
+| ids | Level | Angela's rate (peers = baseline) | Config override |
+|-----|-------|-----------------------------------|-----------------|
+| 40..43 | `et4-abnormalscarce-mild-*`     | `mu_anomalies` ×20 (~635 samples/600s, baseline ~12,600) | `exp_et4_angela_abnormalscarce_mild` |
+| 44..47 | `et4-abnormalscarce-moderate-*` | `mu_anomalies` ×100 (~139 samples/600s) | `exp_et4_angela_abnormalscarce_moderate` |
+| 48..51 | `et4-abnormalscarce-severe-*`   | `mu_anomalies` ×500 (~32 samples/600s, borderline batch_size=32) | `exp_et4_angela_abnormalscarce_severe` |
+| 52..55 | `et4-abnormalscarce-extreme-*`  | `mu_anomalies` ×2000 (~11 samples/600s, local training on that class effectively blocked) | `exp_et4_angela_abnormalscarce_extreme` |
+| 56..59 | `et4-normalscarce-mild-*`       | `mu_normal` ×20 (~857 samples/600s, baseline ~16,900) | `exp_et4_angela_normalscarce_mild` |
+| 60..63 | `et4-normalscarce-moderate-*`   | `mu_normal` ×100 (~181 samples/600s) | `exp_et4_angela_normalscarce_moderate` |
+| 64..67 | `et4-normalscarce-severe-*`     | `mu_normal` ×500 (~42 samples/600s, borderline batch_size=32) | `exp_et4_angela_normalscarce_severe` |
+| 68..71 | `et4-normalscarce-extreme-*`    | `mu_normal` ×2000 (~14 samples/600s, local training on NORMAL effectively blocked) | `exp_et4_angela_normalscarce_extreme` |
+
+Sample-count estimates are Monte-Carlo simulations of the exact lognormal
+inter-arrival model over a 600 s run (see
+`config/overrides/exp_et4_angela_abnormalscarce_mild.yaml` for the full
+writeup); real counts vary run to run since the lognormal is heavy-tailed.
+
+**Eval-anchor decoupling.** Pushing a class's arrival rate down hard enough to
+be interesting also starves the *evaluation* anchors sigma-grid/HSJA draw from
+the same live buffers — `_sigma_grid_evaluation`/`_hsja_evaluation` silently
+return `None` once a buffer has fewer than 10 samples, which would make
+angela's own robustness eval go blank exactly when the imbalance is most
+severe. `ProducerNode` now runs a third thread, `_thread_eval_anchors`,
+publishing a fixed-cadence (`eval_anchor_interval_secs`, default 2.0 s),
+class-balanced NORMAL/ANOMALY/ATTACK round-robin to `{vehicle}_eval_anchors`
+from its own `anchor_virtual_train`, entirely decoupled from
+`mu_normal`/`mu_anomalies`/the attack-infection schedule. `ConsumerNode` routes
+that stream into three new `anchor_*_buffer`s and `_sample_with_anchor_fallback`
+tops up `_sigma_grid_evaluation` and `_hsja_evaluation`'s (`clean_anchors=True`)
+buffer reads from them whenever the live buffer is short. This is a no-op for
+every experiment that doesn't induce class scarcity — the top-up only fires on
+a shortfall — so ET1/ET2/ET3 and the network-ET4 block are unaffected.
 
 ### How it maps onto `tests/experiments.py`
 

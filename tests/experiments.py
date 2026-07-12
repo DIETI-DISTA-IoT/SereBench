@@ -45,6 +45,28 @@ Mp_std/Bp_std, so cross-condition comparisons are unconfounded.
         32..35 et4-combo-lo-*             angela loss 0.2 + delay 100ms / jitter 25ms
         36..39 et4-combo-hi-*             angela loss 0.4 + delay 250ms / jitter 60ms
 
+  Block C — ET4, class-imbalance sub-axis (does FL help a vehicle whose OWN
+  data is class-imbalanced?), ids 40..71:
+    Sibling block to the network-impairment one above (added alongside it, not
+    replacing it). Angela's producer generation rate for one class is
+    throttled — mu_anomalies ("abnormalscarce", starves ANOMALY+ATTACK) or
+    mu_normal ("normalscarce", starves NORMAL) — while bob/claude/daniel keep
+    the default, balanced rates. Everyone trains clean and shares the same
+    decoupled eval as ET3/network-ET4; the consumer's eval-anchor fallback
+    (default_vehicle_config.eval_anchor_interval_secs) keeps that eval
+    reporting even once angela's own buffers run thin. 8 imbalance levels (4
+    abnormalscarce + 4 normalscarce, each mild/moderate/severe/extreme; see
+    config/overrides/exp_et4_angela_abnormalscarce_mild.yaml for the
+    calibration writeup) x the same 4 FL modes:
+        40..43 et4-abnormalscarce-mild-*        mu_anomalies x20
+        44..47 et4-abnormalscarce-moderate-*    mu_anomalies x100
+        48..51 et4-abnormalscarce-severe-*      mu_anomalies x500
+        52..55 et4-abnormalscarce-extreme-*     mu_anomalies x2000
+        56..59 et4-normalscarce-mild-*          mu_normal x20
+        60..63 et4-normalscarce-moderate-*      mu_normal x100
+        64..67 et4-normalscarce-severe-*        mu_normal x500
+        68..71 et4-normalscarce-extreme-*       mu_normal x2000
+
 Run each across the three architectures via experiments.py (mlp),
 experiments_cnn.py (cnn) and experiments_resnet.py (resnet). Dynamic-noise
 experiments were dropped from the paper and are no longer part of the matrix.
@@ -60,11 +82,14 @@ between runs — it only starts and stops the services running inside them.
 
 Typical usage
 -------------
-  # All 39 experiments (7 canonical + 32 ET4), 5 seeds each
+  # All 71 experiments (7 canonical + 32 network-ET4 + 32 imbalance-ET4), 5 seeds each
   python tests/experiments.py
 
   # Just the ET4 network-free-rider block (ids 8..39)
   python tests/experiments.py --experiments $(seq 8 39)
+
+  # Just the ET4 class-imbalance free-rider block (ids 40..71)
+  python tests/experiments.py --experiments $(seq 40 71)
 
   # Specific experiments only
   python tests/experiments.py --experiments 1 2
@@ -274,6 +299,68 @@ def _extend_with_et4(experiments: dict[int, dict]) -> None:
 
 
 _extend_with_et4(EXPERIMENTS)
+
+
+# ---------------------------------------------------------------------------
+# Block C — ET4 (does FL help a CLASS-IMBALANCED free-rider?), ids 40..71
+# ---------------------------------------------------------------------------
+# Sibling sub-axis of the network-impairment block above, added alongside it
+# rather than replacing it (the network block is untouched). Angela is the
+# only vehicle whose producer generation rate for one class is throttled —
+# via mu_anomalies (starving ANOMALY+ATTACK, "abnormalscarce") or mu_normal
+# (starving NORMAL, "normalscarce"); bob/claude/daniel keep the default,
+# balanced rates. Everyone trains clean and shares the ET3/network-ET4
+# decoupled eval (HSJA on clean anchors + fixed sigma-grid), rescued from
+# buffer starvation by the consumer's eval-anchor fallback (see
+# default_vehicle_config.eval_anchor_interval_secs and
+# config/overrides/exp_et4_angela_abnormalscarce_mild.yaml for the full
+# mechanism writeup and the Monte-Carlo calibration behind the multipliers).
+# Generated as the cross-product of 8 imbalance levels (4 abnormalscarce + 4
+# normalscarce, each mild/moderate/severe/extreme) x 4 FL modes (no-FL
+# baseline + FedAvg / FedMedian / FedYogi) = 32 experiments (ids 40..71).
+
+# (short_tag, override_profile, human description of angela's imbalance)
+_ET4_IMBALANCE_LEVELS: list[tuple[str, str, str]] = [
+    ("abnormalscarce-mild",     "exp_et4_angela_abnormalscarce_mild",
+     "mu_anomalies x20 (~635 anomaly+attack samples/600s, vs. ~12,600 baseline)"),
+    ("abnormalscarce-moderate", "exp_et4_angela_abnormalscarce_moderate",
+     "mu_anomalies x100 (~139 anomaly+attack samples/600s)"),
+    ("abnormalscarce-severe",   "exp_et4_angela_abnormalscarce_severe",
+     "mu_anomalies x500 (~32 anomaly+attack samples/600s, borderline batch_size)"),
+    ("abnormalscarce-extreme",  "exp_et4_angela_abnormalscarce_extreme",
+     "mu_anomalies x2000 (~11 anomaly+attack samples/600s, local training on that class effectively blocked)"),
+    ("normalscarce-mild",       "exp_et4_angela_normalscarce_mild",
+     "mu_normal x20 (~857 normal samples/600s, vs. ~16,900 baseline)"),
+    ("normalscarce-moderate",   "exp_et4_angela_normalscarce_moderate",
+     "mu_normal x100 (~181 normal samples/600s)"),
+    ("normalscarce-severe",     "exp_et4_angela_normalscarce_severe",
+     "mu_normal x500 (~42 normal samples/600s, borderline batch_size)"),
+    ("normalscarce-extreme",    "exp_et4_angela_normalscarce_extreme",
+     "mu_normal x2000 (~14 normal samples/600s, local training on NORMAL effectively blocked)"),
+]
+
+
+def _extend_with_et4_imbalance(experiments: dict[int, dict]) -> None:
+    """Append the 32-cell ET4 class-imbalance free-rider block to *experiments* in place."""
+    next_id = max(experiments) + 1
+    for level_tag, level_profile, level_desc in _ET4_IMBALANCE_LEVELS:
+        for mode_tag, fl_on, extra in _ET4_MODES:
+            override = level_profile if extra is None else (level_profile, extra)
+            fl_desc = "no FL" if not fl_on else f"FL ({mode_tag[len('fed'):].upper()})"
+            experiments[next_id] = {
+                "name": f"et4-{level_tag}-{mode_tag}",
+                "fl": fl_on,
+                "override": override,
+                "dynamic_noise": False,
+                "description": (
+                    f"ET4 class-imbalance free-rider: angela {level_desc}, peers "
+                    f"balanced rates. {fl_desc}."
+                ),
+            }
+            next_id += 1
+
+
+_extend_with_et4_imbalance(EXPERIMENTS)
 
 
 # ---------------------------------------------------------------------------
@@ -490,7 +577,7 @@ def main() -> int:
         choices=list(EXPERIMENTS),
         default=list(EXPERIMENTS),
         metavar="N",
-        help="Experiment numbers to run (default: all; 1..7 canonical + 8..39 ET4).",
+        help="Experiment numbers to run (default: all; 1..7 canonical + 8..39 network-ET4 + 40..71 imbalance-ET4).",
     )
     parser.add_argument(
         "--seeds",

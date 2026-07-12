@@ -574,6 +574,26 @@ Vehicle containers are **not** deleted after each run.
 W&B runs are named `{group}_seed{seed}_run{N}` and tagged with `wandb.group`
 so they can be filtered together in the W&B UI.
 
+> **Note:** the table above predates the redesigned ET1–ET4 campaign now
+> defined in `tests/experiments.py` (and mirrored in
+> `offline_simulation/experiments.py`) — treat that module's docstring as the
+> current source of truth for the experiment matrix, not this table.
+>
+> The latest addition is a **class-imbalance sub-block of ET4** (ids 40–71,
+> sibling to the existing network-impairment ET4 block at ids 8–39, added
+> alongside it rather than replacing it): angela's producer generation rate
+> for one class is throttled via `mu_anomalies` ("abnormalscarce", starves
+> ANOMALY+ATTACK) or `mu_normal` ("normalscarce", starves NORMAL), at four
+> levels (mild/moderate/severe/extreme) crossed with the same four FL modes,
+> while bob/claude/daniel keep the default, balanced rates. See
+> `config/overrides/exp_et4_angela_abnormalscarce_mild.yaml` for the full
+> mechanism writeup and the Monte-Carlo calibration behind the multipliers.
+> A companion change (`eval_anchor_interval_secs`, the
+> `{vehicle}_eval_anchors` stream, and the anchor buffers in the consumer)
+> keeps the sigma-grid/HSJA robustness evals reporting even once a
+> deliberately-throttled class's live buffer runs thin — it is a no-op for
+> every other experiment.
+
 ---
 
 ### Editing an existing experiment

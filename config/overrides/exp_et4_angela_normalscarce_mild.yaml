@@ -1,0 +1,81 @@
+# ET4 — "Angela class-imbalance free-rider" block (Block C, imbalance sub-axis).
+#
+# Goal: isolate whether federated learning helps a single node whose local
+# DATA is imbalanced — scarce NORMAL telemetry relative to ANOMALY+ATTACK —
+# while its peers see a balanced stream. Mirror-image of the abnormalscarce
+# sub-axis (see exp_et4_angela_abnormalscarce_mild.yaml for the full
+# mechanism writeup): here mu_normal is raised instead of mu_anomalies, so
+# angela's NORMAL-labelled buffer/diversity is the one that gets starved
+# while her ANOMALY/ATTACK rate stays at the fleet default. bob/claude/daniel
+# keep the default, balanced mu_normal/mu_anomalies rates.
+#
+# What differs across the 4 levels (mild/moderate/severe/extreme) of THIS
+# sub-axis is ONLY angela's mu_normal. Held identical everywhere:
+#   - training: clean for all four vehicles (adversarial_training=False);
+#   - network: pristine for everyone (no packet loss / delay / jitter);
+#   - FL downlink: pristine (federated_learning packet_loss_rate/delay all 0);
+#   - evaluation: the same decoupled target as ET3/network-ET4 (HSJA on clean
+#     anchors + a fixed Gaussian sigma-grid), rescued from the NORMAL-buffer
+#     starvation the same way, via eval_anchor_interval_secs.
+#
+# THIS FILE — mild level: mu_normal x20 (baseline 0.117 -> 2.34).
+# Monte-Carlo expected count over a 600s run: ~857 NORMAL samples (vs.
+# ~16,900 at baseline) — noticeably reduced diversity, buffer still fills.
+
+default_vehicle_config:
+  # Pristine baseline for the whole fleet; angela is bumped up below. Peers
+  # inherit these values (no override).
+  mu_anomalies: 0.157
+  mu_normal: 0.117
+  packet_loss_rate: 0.0
+  delay_mean_ms: 0.0
+  jitter_std_ms: 0.0
+  adversarial_training: False
+
+federated_learning:
+  # Keep the FL coordinator's global_weights downlink perfect: the experiment
+  # asks whether FL *helps* angela, so its delivery must not be impaired too.
+  packet_loss_rate: 0.0
+  delay_mean_ms: 0.0
+  jitter_std_ms: 0.0
+
+default_consumer_config:
+  # Identical decoupled eval target for every vehicle (as in exp_et3_freerider
+  # / the network-ET4 overrides), so this sub-axis's robustness numbers line
+  # up with the rest of the ET3/ET4 campaign.
+  hsja_clean_anchors: true
+  eval_sigmas: [0.5, 1.0, 1.5, 2.0]
+
+vehicles:
+  - angela:
+      Mp_std: 0
+      Bp_std: 0
+      mu_anomalies: 0.157
+      mu_normal: 2.340
+      packet_loss_rate: 0.0
+      delay_mean_ms: 0.0
+      jitter_std_ms: 0.0
+  - bob:
+      Mp_std: 0
+      Bp_std: 0
+      mu_anomalies: 0.157
+      mu_normal: 0.117
+      packet_loss_rate: 0.0
+      delay_mean_ms: 0.0
+      jitter_std_ms: 0.0
+  - claude:
+      Mp_std: 0
+      Bp_std: 0
+      mu_anomalies: 0.157
+      mu_normal: 0.117
+      packet_loss_rate: 0.0
+      delay_mean_ms: 0.0
+      jitter_std_ms: 0.0
+  - daniel:
+      Mp_std: 0
+      Bp_std: 0
+      mu_anomalies: 0.157
+      mu_normal: 0.117
+      packet_loss_rate: 0.0
+      delay_mean_ms: 0.0
+      jitter_std_ms: 0.0
