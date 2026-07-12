@@ -9,3 +9,4 @@ data
 **/venv_serebench_history_cache.pkl
 .ipynb_checkpoints/
 wandb
+sweep_logs

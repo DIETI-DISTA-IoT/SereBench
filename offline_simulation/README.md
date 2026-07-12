@@ -305,6 +305,42 @@ The experiment **matrix** is identical across the two runners.
 
 ---
 
+## Running the sweep in parallel — `run_sweep.py`
+
+`experiments.py` walks the grid strictly sequentially. On a many-core box use
+`run_sweep.py`, which runs every `(experiment, seed, arch)` cell as an
+independent child process, `--jobs` at a time — the cells share no state, so
+results are byte-for-byte identical, only the scheduling changes.
+
+```bash
+# The whole ET5 block (ids 40..76), 3 seeds, MLP = 111 cells, 50-wide, 10-min runs
+python -m offline_simulation.run_sweep --experiments $(seq 40 76) --jobs 50
+
+# Everything (1..76) x 3 seeds x 3 archs, W&B offline, on a 50-vCPU box
+python -m offline_simulation.run_sweep \
+    --experiments $(seq 1 76) --arch all --jobs 50 --run-duration 600
+
+# Preview the job list without running it
+python -m offline_simulation.run_sweep --experiments $(seq 40 76) --dry-run
+```
+
+Each cell's stdout/stderr is captured to `<log-dir>/<run-name>.log`, a
+`manifest.json` records every cell's exit code + duration, and W&B (offline by
+default — the safe choice for a big batch) collects under `<log-dir>/wandb/`.
+Push the whole batch to W&B afterwards with the command the runner prints, e.g.
+`wandb sync <log-dir>/wandb/*-run-*`.
+
+**Sizing.** A cell is light — its training loop is sleep-throttled, so it
+averages only ~0.4 effective cores (spiking inside HopSkipJump windows) and
+~1 GB RAM. The sweep is **memory-bound, not CPU-bound**: `--jobs` defaults to the
+vCPU count, `--threads-per-job` pins each child's math-library threads to 1 so
+the HSJA spikes stay contained. Budget ~1 GB RAM per concurrent cell; raise
+`--jobs` above the core count if the CPUs idle, lower it if RAM is tight. Keep
+`--settle >= 0.5` so consumers warm their anomaly buffers before attacks (see the
+*Startup order* note above) — the default 1.0 is the platform timing.
+
+---
+
 ## Fidelity — how faithful is it?
 
 **Vendored verbatim** (byte-identical copies of the sereBench-branch sources —
