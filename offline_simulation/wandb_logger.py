@@ -76,7 +76,7 @@ class WandbNode:
         self._consumer = None
 
     def push_to_wandb(self, key, value, step=None, commit=True):
-        wandb.log({key: value}, step=(step if step is not None else self.step), commit=commit)
+        wandb.log({key: value}, step=(step if step is not None else self.step))
         if step is None:
             self.step += 1
 
